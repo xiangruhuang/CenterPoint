@@ -30,9 +30,14 @@ class WaymoDataset(PointCloudDataset):
         sample=False,
         nsweeps=1,
         load_interval=1,
+        sequence_sampler=None,
         **kwargs,
     ):
-        self.load_interval = load_interval 
+        self.load_interval = load_interval
+        if sequence_sampler is not None:
+            self.sequence_sampler = sequence_sampler
+        else:
+            self.sequence_sampler = None
         self.sample = sample
         self.nsweeps = nsweeps
         print("Using {} sweeps".format(nsweeps))
@@ -47,12 +52,36 @@ class WaymoDataset(PointCloudDataset):
     def reset(self):
         assert False 
 
+    def select_sequences(self):
+        infos = self._waymo_infos
+        seq_ids = [int(info['path'].split('/')[-1].split('.')[0].split('_')[1]) for info in infos]
+        selected_infos = []
+        self.seq_interval = self.sequence_sampler['seq_interval']
+        self.refill = self.sequence_sampler['refill']
+        for info, seq_id in zip(infos, seq_ids):
+            if seq_id % self.seq_interval == 0:
+                selected_infos.append(info)
+        print(f'Subsampled into {len(selected_infos)} frames')
+        if self.refill:
+            while len(selected_infos) < len(self._waymo_infos):
+                for info, seq_id in zip(infos, seq_ids):
+                    if seq_id % self.seq_interval == 0:
+                        selected_infos.append(info)
+                        if len(selected_infos) == len(self._waymo_infos):
+                            break
+
+        self._waymo_infos = selected_infos 
+
     def load_infos(self, info_path):
 
         with open(self._info_path, "rb") as f:
             _waymo_infos_all = pickle.load(f)
 
-        self._waymo_infos = _waymo_infos_all[::self.load_interval]
+        self._waymo_infos = _waymo_infos_all
+
+        if self.sequence_sampler is not None:
+            self.select_sequences()
+        self._waymo_infos = self._waymo_infos[::self.load_interval]
 
         print("Using {} Frames".format(len(self._waymo_infos)))
 

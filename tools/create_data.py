@@ -19,7 +19,7 @@ def nuscenes_data_prep(root_path, version, nsweeps=10, filter_zero=True):
         )
 
 def waymo_data_prep(root_path, split, nsweeps=1):
-    waymo_ds.create_waymo_infos(root_path, split=split, nsweeps=nsweeps)
+    #waymo_ds.create_waymo_infos(root_path, split=split, nsweeps=nsweeps)
     if split == 'train': 
         create_groundtruth_database(
             "WAYMO",

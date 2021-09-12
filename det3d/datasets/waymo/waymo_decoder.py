@@ -82,6 +82,7 @@ def extract_points_from_range_image(laser, calibration, frame_pose):
         tf.convert_to_tensor(range_image_top_pose.data),
         range_image_top_pose.shape.dims)
     # [H, W, 3, 3]
+
     range_image_top_pose_tensor_rotation = transform_utils.get_rotation_matrix(
         range_image_top_pose_tensor[..., 0],
         range_image_top_pose_tensor[..., 1], range_image_top_pose_tensor[...,
@@ -141,6 +142,7 @@ def extract_points(lasers, laser_calibrations, frame_pose):
   points_xyz = []
   points_feature = []
   points_nlz = []
+  
   for laser, calibration in lasers_with_calibration:
     points_list = extract_points_from_range_image(laser, calibration,
                                                   frame_pose)

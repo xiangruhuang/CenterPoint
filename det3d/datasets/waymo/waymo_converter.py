@@ -15,23 +15,31 @@ import tensorflow.compat.v2 as tf
 from waymo_open_dataset import dataset_pb2
 
 from multiprocessing import Pool 
+import numpy as np
 
 tf.enable_v2_behavior()
 
 fnames = None 
 LIDAR_PATH = None
 ANNO_PATH = None 
+prefix = 1 # validation
 
 def convert(idx):
-    global fnames
+    global fnames, prefix
     fname = fnames[idx]
     dataset = tf.data.TFRecordDataset(fname, compression_type='')
+    
     for frame_id, data in enumerate(dataset):
         frame = dataset_pb2.Frame()
         frame.ParseFromString(bytearray(data.numpy()))
         decoded_frame = waymo_decoder.decode_frame(frame, frame_id)
+        bin_filepath = f'/mnt/xrhuang/datasets/waymo/kitti_format/training/velodyne/{prefix}{idx:03d}{frame_id:03d}.bin'
+        
+        #points = np.fromfile(bin_filepath, dtype=np.float32).reshape(-1, 6)
+        decoded_frame.pop('lidars')
+        decoded_frame['lidars'] = bin_filepath
+        
         decoded_annos = waymo_decoder.decode_annos(frame, frame_id)
-
         with open(os.path.join(LIDAR_PATH, 'seq_{}_frame_{}.pkl'.format(idx, frame_id)), 'wb') as f:
             pickle.dump(decoded_frame, f)
         
@@ -40,14 +48,13 @@ def convert(idx):
 
 
 def main(args):
-    global fnames 
-    fnames = list(glob.glob(args.record_path))
+    global fnames, prefix
+    fnames = sorted(list(glob.glob(args.record_path)))
 
     print("Number of files {}".format(len(fnames)))
 
     with Pool(128) as p: # change according to your cpu
         r = list(tqdm.tqdm(p.imap(convert, range(len(fnames))), total=len(fnames)))
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Waymo Data Converter')

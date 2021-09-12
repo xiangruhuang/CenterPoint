@@ -59,8 +59,13 @@ def read_sweep(sweep, painted=False):
     return points_sweep.T, curr_times.T
 
 def read_single_waymo(obj):
-    points_xyz = obj["lidars"]["points_xyz"]
-    points_feature = obj["lidars"]["points_feature"]
+    bin_file = obj['lidars']
+    points_all = np.fromfile(bin_file, dtype=np.float32).reshape(-1, 6)
+    points_xyz = points_all[:, :3]
+    points_feature = points_all[:, 3:5]
+
+    #points_xyz = obj["lidars"]["points_xyz"]
+    #points_feature = obj["lidars"]["points_feature"]
 
     # normalize intensity 
     points_feature[:, 0] = np.tanh(points_feature[:, 0])
@@ -71,9 +76,14 @@ def read_single_waymo(obj):
 
 def read_single_waymo_sweep(sweep):
     obj = get_obj(sweep['path'])
+    
+    bin_file = obj['lidars']
+    points_all = np.fromfile(bin_file, dtype=np.float32).reshape(-1, 6)
+    points_xyz = points_all[:, :3]
+    points_feature = points_all[:, 3:5]
 
-    points_xyz = obj["lidars"]["points_xyz"]
-    points_feature = obj["lidars"]["points_feature"]
+    #points_xyz = obj["lidars"]["points_xyz"]
+    #points_feature = obj["lidars"]["points_feature"]
 
     # normalize intensity 
     points_feature[:, 0] = np.tanh(points_feature[:, 0])

@@ -192,7 +192,8 @@ class DistributedGroupSampler(Sampler):
             if size > 0:
                 indice = np.where(self.flag == i)[0]
                 assert len(indice) == size
-                indice = indice[list(torch.randperm(int(size), generator=g))].tolist()
+                xx= torch.randperm(int(size), generator=g)
+                indice = indice[torch.randperm(int(size), generator=g).tolist()].tolist()
                 extra = int(
                     math.ceil(size * 1.0 / self.samples_per_gpu / self.num_replicas)
                 ) * self.samples_per_gpu * self.num_replicas - len(indice)

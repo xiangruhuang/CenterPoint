@@ -22,7 +22,7 @@ tf.enable_v2_behavior()
 fnames = None 
 LIDAR_PATH = None
 ANNO_PATH = None 
-prefix = 1 # validation
+prefix = 0 # validation
 
 def convert(idx):
     global fnames, prefix

@@ -16,7 +16,7 @@ target_assigner = dict(
 
 # model settings
 model = dict(
-    type="VoxelNet",
+    type="SNet",
     pretrained=None,
     reader=dict(
         type="VoxelFeatureExtractorV3",
@@ -123,11 +123,13 @@ voxel_generator = dict(
     max_voxel_num=150000,
 )
 
+primitive_voxel_size = [0.4, 0.4, 0.4]
+
 train_pipeline = [
     dict(type="LoadPointCloudFromFile", dataset=dataset_type),
     dict(type="LoadPointCloudAnnotations", with_bbox=True),
     dict(type="Preprocess", cfg=train_preprocessor),
-    dict(type="Voxelization", cfg=voxel_generator),
+    dict(type="ExtractPrimitives", voxel_size=primitive_voxel_size, visualize=False),
     dict(type="AssignLabel", cfg=train_cfg["assigner"]),
     dict(type="Reformat"),
 ]
@@ -135,7 +137,7 @@ test_pipeline = [
     dict(type="LoadPointCloudFromFile", dataset=dataset_type),
     dict(type="LoadPointCloudAnnotations", with_bbox=True),
     dict(type="Preprocess", cfg=val_preprocessor),
-    dict(type="Voxelization", cfg=voxel_generator),
+    dict(type="ExtractPrimitives", voxel_size=primitive_voxel_size),
     dict(type="AssignLabel", cfg=train_cfg["assigner"]),
     dict(type="Reformat"),
 ]

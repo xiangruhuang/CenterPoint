@@ -1,6 +1,7 @@
 import datetime
 import os.path as osp
 from collections import OrderedDict
+import numpy as np
 
 import torch
 import torch.distributed as dist
@@ -112,11 +113,17 @@ class TextLoggerHook(LoggerHook):
         json_log = OrderedDict()
         for k, v in log_dict.items():
             json_log[k] = self._round_float(v)
+            if isinstance(json_log[k], np.ndarray):
+                json_log[k] = 0.0
 
         if trainer.rank == 0:
-            with open(self.json_log_path, "a+") as f:
-                torchie.dump(json_log, f, file_format="json")
-                f.write("\n")
+            try:
+                with open(self.json_log_path, "a+") as f:
+                    torchie.dump(json_log, f, file_format="json")
+                    f.write("\n")
+            except Exception as e:
+                print(e)
+                import ipdb; ipdb.set_trace()
 
     def _round_float(self, items):
         if isinstance(items, list):

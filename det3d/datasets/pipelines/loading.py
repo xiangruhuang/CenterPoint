@@ -2,6 +2,7 @@ import os.path as osp
 import warnings
 import numpy as np
 from functools import reduce
+import torch
 
 import pycocotools.mask as maskUtils
 
@@ -181,6 +182,62 @@ class LoadPointCloudFromFile(object):
 
         return res, info
 
+
+@PIPELINES.register_module
+class LoadMotionMasks(object):
+    def __init__(self,
+                 #point_cloud_range = [-75.2, -75.2, 0.3, 75.2, 75.2, 4],
+                 point_cloud_range = [-74.88, -74.88, 0.3, 74.88, 74.88, 4],
+                 visualize=False,
+                 interval=1,
+                 **kwargs):
+        self.point_cloud_range = point_cloud_range
+        self.visualize = visualize
+        self.interval = interval
+
+    def __call__(self, res, info):
+
+        if res["type"] == 'WaymoDataset' and "gt_boxes" in info:
+            path = info['path']
+            tokens = path.split('/')[-1].split('.')[0].split('_')
+            seq_id, frame_id = int(tokens[1]), int(tokens[3])
+            if seq_id % self.interval == 0:
+                pth_file = os.path.join(
+                    'data/Waymo/train/motion_masks/',
+                    f'0{seq_id:03d}{frame_id:03d}.pth',
+                )
+                if os.path.exists(pth_file):
+                    motion_dict = torch.load(pth_file)
+                    points = res['lidar']['points'][:, :3]
+                    in_range = ((points > self.point_cloud_range[:3]) & (points < self.point_cloud_range[3:]))
+                    in_range = in_range.all(axis=-1)
+                    points = points[in_range]
+                    valid_points = points[motion_dict['valid_idx']]
+                    object_points = valid_points[motion_dict['obj_idx']]
+                    moving_points = valid_points[motion_dict['moving']]
+                    res['lidar']['using_motion_mask'] = np.array(True).astype(np.bool).reshape(1)
+                else:
+                    res['lidar']['using_motion_mask'] = np.array(False).astype(np.bool).reshape(1)
+                    moving_points = np.zeros(shape=(0, 3), dtype=np.float32)
+            else:
+                res['lidar']['using_motion_mask'] = np.array(False).astype(np.bool).reshape(1)
+                moving_points = np.zeros(shape=(0, 3), dtype=np.float32)
+
+            if self.visualize:
+                import polyscope as ps
+                ps.set_up_dir('z_up')
+                ps.init()
+                ps.register_point_cloud('points', points, radius=2e-4)
+                ps.register_point_cloud('valid points', valid_points, radius=2e-4)
+                ps.register_point_cloud('objects', object_points, radius=3e-4)
+                ps.register_point_cloud('moving', moving_points, radius=3e-4)
+                ps.show() 
+           
+            res['lidar']['moving_points'] = moving_points
+        else:
+            pass
+
+        return res, info
 
 @PIPELINES.register_module
 class LoadPointCloudAnnotations(object):

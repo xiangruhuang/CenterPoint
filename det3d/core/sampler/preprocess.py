@@ -769,12 +769,16 @@ def global_scaling(gt_boxes, points, scale=0.05):
 
 
 def global_rotation(gt_boxes, points, rotation=np.pi / 4):
+    if not isinstance(points, list):
+        points = [points]
+
     if not isinstance(rotation, list):
         rotation = [-rotation, rotation]
     noise_rotation = np.random.uniform(rotation[0], rotation[1])
-    points[:, :3] = box_np_ops.rotation_points_single_angle(
-        points[:, :3], noise_rotation, axis=2
-    )
+    for i in range(len(points)):
+        points[i][:, :3] = box_np_ops.rotation_points_single_angle(
+            points[i][:, :3], noise_rotation, axis=2
+        )
     gt_boxes[:, :3] = box_np_ops.rotation_points_single_angle(
         gt_boxes[:, :3], noise_rotation, axis=2
     )
@@ -785,6 +789,10 @@ def global_rotation(gt_boxes, points, rotation=np.pi / 4):
             axis=2,
         )[:, :2]
     gt_boxes[:, -1] += noise_rotation
+
+    if len(points) == 1:
+        points = points[0]
+
     return gt_boxes, points
 
 
@@ -801,6 +809,8 @@ def random_flip(gt_boxes, points, probability=0.5):
     return gt_boxes, points
 
 def random_flip_both(gt_boxes, points, probability=0.5, flip_coor=None):
+    if not isinstance(points, list):
+        points = [points]
     # x flip 
     enable = np.random.choice(
         [False, True], replace=False, p=[1 - probability, probability]
@@ -808,7 +818,8 @@ def random_flip_both(gt_boxes, points, probability=0.5, flip_coor=None):
     if enable:
         gt_boxes[:, 1] = -gt_boxes[:, 1]
         gt_boxes[:, -1] = -gt_boxes[:, -1] + np.pi
-        points[:, 1] = -points[:, 1]
+        for i in range(len(points)):
+            points[i][:, 1] = -points[i][:, 1]
         if gt_boxes.shape[1] > 7:  # y axis: x, y, z, w, h, l, vx, vy, r
             gt_boxes[:, 7] = -gt_boxes[:, 7]
     
@@ -819,35 +830,52 @@ def random_flip_both(gt_boxes, points, probability=0.5, flip_coor=None):
     if enable:
         if flip_coor is None:
             gt_boxes[:, 0] = -gt_boxes[:, 0]
-            points[:, 0] = -points[:, 0]
+            for i in range(len(points)):
+                points[i][:, 0] = -points[i][:, 0]
         else:
             gt_boxes[:, 0] = flip_coor * 2 - gt_boxes[:, 0]
-            points[:, 0] = flip_coor * 2 - points[:, 0]
+            for i in range(len(points)):
+                points[i][:, 0] = flip_coor * 2 - points[i][:, 0]
 
         gt_boxes[:, -1] = -gt_boxes[:, -1] + 2*np.pi  # TODO: CHECK THIS 
         
         if gt_boxes.shape[1] > 7:  # y axis: x, y, z, w, h, l, vx, vy, r
             gt_boxes[:, 6] = -gt_boxes[:, 6]
     
+    if len(points) == 1:
+        points = points[0]
     return gt_boxes, points
 
 
 def global_scaling_v2(gt_boxes, points, min_scale=0.95, max_scale=1.05):
+    if not isinstance(points, list):
+        points = [points]
     noise_scale = np.random.uniform(min_scale, max_scale)
-    points[:, :3] *= noise_scale
+    for i in range(len(points)):
+        points[i][:, :3] *= noise_scale
     gt_boxes[:, :-1] *= noise_scale
+    if len(points) == 1:
+        points = points[0]
     return gt_boxes, points
 
 
 def global_rotation_v2(gt_boxes, points, min_rad=-np.pi / 4, max_rad=np.pi / 4):
+    if not isinstance(points, list):
+        points = [points]
+
     noise_rotation = np.random.uniform(min_rad, max_rad)
-    points[:, :3] = box_np_ops.rotation_points_single_angle(
-        points[:, :3], noise_rotation, axis=2
-    )
+    for i in range(len(points)):
+        points[i][:, :3] = box_np_ops.rotation_points_single_angle(
+            points[i][:, :3], noise_rotation, axis=2
+        )
     gt_boxes[:, :3] = box_np_ops.rotation_points_single_angle(
         gt_boxes[:, :3], noise_rotation, axis=2
     )
     gt_boxes[:, -1] += noise_rotation
+    
+    if len(points) == 1:
+        points = points[0]
+
     return gt_boxes, points
 
 
@@ -941,13 +969,17 @@ def global_translate_(gt_boxes, points, noise_translate_std):
     """
     Apply global translation to gt_boxes and points.
     """
-
+    
     if not isinstance(noise_translate_std, (list, tuple, np.ndarray)):
         noise_translate_std = np.array(
             [noise_translate_std, noise_translate_std, noise_translate_std]
         )
     if all([e == 0 for e in noise_translate_std]):
         return gt_boxes, points
+    
+    if not isinstance(points, list):
+        points = [points]
+
     noise_translate = np.array(
         [
             np.random.normal(0, noise_translate_std[0], 1),
@@ -956,8 +988,12 @@ def global_translate_(gt_boxes, points, noise_translate_std):
         ]
     ).T
 
-    points[:, :3] += noise_translate
+    for i in range(len(points)):
+        points[i][:, :3] += noise_translate
     gt_boxes[:, :3] += noise_translate
+
+    if len(points) == 1:
+        points = points[0]
 
     return gt_boxes, points
 

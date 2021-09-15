@@ -368,8 +368,8 @@ class Trainer(object):
             losses = model(example, return_loss=True)
             self.call_hook("after_forward")
             loss, log_vars = parse_second_losses(losses)
+            
             del losses
-
             outputs = dict(
                 loss=loss, log_vars=log_vars, num_samples=-1  # TODO: FIX THIS
             )

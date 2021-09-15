@@ -43,6 +43,7 @@ class Preprocess(object):
                 
             self.npoints = cfg.get("npoints", -1)
 
+        self.with_motion_mask = cfg.get('with_motion_mask', False)
         self.no_augmentation = cfg.get('no_augmentation', False)
 
     def __call__(self, res, info):
@@ -54,6 +55,8 @@ class Preprocess(object):
                 points = res["lidar"]["combined"]
             else:
                 points = res["lidar"]["points"]
+            if self.with_motion_mask:
+                moving_points = res['lidar']['moving_points']
         elif res["type"] in ["NuScenesDataset"]:
             points = res["lidar"]["combined"]
         else:
@@ -123,6 +126,9 @@ class Preprocess(object):
             )
             gt_dict["gt_classes"] = gt_classes
 
+            # pack
+            if self.with_motion_mask:
+                points = [points, moving_points]
             gt_dict["gt_boxes"], points = prep.random_flip_both(gt_dict["gt_boxes"], points)
             
             gt_dict["gt_boxes"], points = prep.global_rotation(
@@ -134,6 +140,10 @@ class Preprocess(object):
             gt_dict["gt_boxes"], points = prep.global_translate_(
                 gt_dict["gt_boxes"], points, noise_translate_std=self.global_translate_std
             )
+            # unpack
+            if self.with_motion_mask:
+                points, moving_points = points
+
         elif self.no_augmentation:
             gt_boxes_mask = np.array(
                 [n in self.class_names for n in gt_dict["gt_names"]], dtype=np.bool_
@@ -151,6 +161,8 @@ class Preprocess(object):
             np.random.shuffle(points)
 
         res["lidar"]["points"] = points
+        if self.with_motion_mask:
+            res["lidar"]["moving_points"] = moving_points
 
         if self.mode == "train":
             res["lidar"]["annotations"] = gt_dict
@@ -280,6 +292,7 @@ class AssignLabel(object):
         self.gaussian_overlap = assigner_cfg.gaussian_overlap
         self._max_objs = assigner_cfg.max_objs
         self._min_radius = assigner_cfg.min_radius
+        self.with_motion_mask = assigner_cfg.get('with_motion_mask', False)
 
     def __call__(self, res, info):
         max_objs = self._max_objs
@@ -334,7 +347,6 @@ class AssignLabel(object):
                     task_box[:, -1], offset=0.5, period=np.pi * 2
                 )
 
-            # print(gt_dict.keys())
             gt_dict["gt_classes"] = task_classes
             gt_dict["gt_names"] = task_names
             gt_dict["gt_boxes"] = task_boxes
@@ -345,6 +357,28 @@ class AssignLabel(object):
 
             hms, anno_boxs, inds, masks, cats = [], [], [], [], []
 
+            if self.with_motion_mask:
+                motion_hm = np.zeros((1, feature_map_size[1], feature_map_size[0]), dtype=np.float32)
+                moving_points = res['lidar']['moving_points']
+                mx, my = moving_points[:, :2].T
+                mx = (mx - pc_range[0]) / voxel_size[0] / self.out_size_factor
+                my = (my - pc_range[1]) / voxel_size[1] / self.out_size_factor
+                mxy = np.stack([mx, my], axis=-1).astype(np.int32)
+                mxy = np.unique(mxy, axis=0)
+                radius = 2
+                for m_int in mxy:
+                    draw_gaussian(motion_hm[0], m_int, radius)
+                if False:
+                    from det3d.core.utils.visualization import Visualizer
+                    vis = Visualizer([0.1, 0.1, 0.15], [-75.2, -75.2])
+                    vis.clear()
+                    vis.pointcloud('p', res['lidar']['points'][:, :3])
+                    vis.pointcloud('mp', moving_points)
+                    vis.heatmap('motion-hm', motion_hm[0])
+                    vis.show()
+
+                example.update({'motion_hm': motion_hm})
+            
             for idx, task in enumerate(self.tasks):
                 hm = np.zeros((len(class_names_by_task[idx]), feature_map_size[1], feature_map_size[0]),
                               dtype=np.float32)
@@ -353,7 +387,7 @@ class AssignLabel(object):
                     # [reg, hei, dim, vx, vy, rots, rotc]
                     anno_box = np.zeros((max_objs, 10), dtype=np.float32)
                 elif res['type'] == 'WaymoDataset':
-                    anno_box = np.zeros((max_objs, 10), dtype=np.float32) 
+                    anno_box = np.zeros((max_objs, 10), dtype=np.float32)
                 else:
                     raise NotImplementedError("Only Support nuScene for Now!")
 
@@ -361,7 +395,7 @@ class AssignLabel(object):
                 mask = np.zeros((max_objs), dtype=np.uint8)
                 cat = np.zeros((max_objs), dtype=np.int64)
 
-                num_objs = min(gt_dict['gt_boxes'][idx].shape[0], max_objs)  
+                num_objs = min(gt_dict['gt_boxes'][idx].shape[0], max_objs)
 
                 for k in range(num_objs):
                     cls_id = gt_dict['gt_classes'][idx][k] - 1

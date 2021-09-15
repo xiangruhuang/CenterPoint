@@ -69,9 +69,9 @@ def parse_second_losses(losses):
     loss = sum(losses["loss"])
     for loss_name, loss_value in losses.items():
         if loss_name == "loc_loss_elem":
-            log_vars[loss_name] = [[i.item() for i in j] for j in loss_value]
+            log_vars[loss_name] = [[i.item() if i.numel() > 0 else 0.0 for i in j] for j in loss_value]
         else:
-            log_vars[loss_name] = [i.item() for i in loss_value]
+            log_vars[loss_name] = [i.item() if i.numel() > 0 else 0.0 for i in loss_value]
 
     return loss, log_vars
 

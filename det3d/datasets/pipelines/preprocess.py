@@ -70,7 +70,7 @@ class Preprocess(object):
                 "gt_names": np.array(anno_dict["names"]).reshape(-1),
             }
 
-        if self.mode == "train" and not self.no_augmentation:
+        if self.mode == "train" and not self.no_augmentation and (not res['lidar']['using_motion_mask']):
             selected = drop_arrays_by_name(
                 gt_dict["gt_names"], ["DontCare", "ignore", "UNKNOWN"]
             )
@@ -144,7 +144,7 @@ class Preprocess(object):
             if self.with_motion_mask:
                 points, moving_points = points
 
-        elif self.no_augmentation:
+        elif self.mode=='train':
             gt_boxes_mask = np.array(
                 [n in self.class_names for n in gt_dict["gt_names"]], dtype=np.bool_
             )

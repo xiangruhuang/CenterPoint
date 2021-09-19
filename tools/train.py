@@ -111,6 +111,7 @@ def main():
 
     datasets = [build_dataset(cfg.data.train)]
     #print(datasets[0][0])
+    torch.autograd.set_detect_anomaly(True)
 
     if len(cfg.workflow) == 2:
         datasets.append(build_dataset(cfg.data.val))

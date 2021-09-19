@@ -154,7 +154,6 @@ class Trainer(object):
         self.model = model
         self.optimizer = optimizer
         self.lr_scheduler = lr_scheduler
-
         self.batch_processor = batch_processor
 
         # Create work_dir
@@ -327,6 +326,7 @@ class Trainer(object):
             )
 
     def call_hook(self, fn_name):
+        
         for hook in self._hooks:
             getattr(hook, fn_name)(self)
 

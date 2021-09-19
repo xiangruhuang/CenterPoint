@@ -201,21 +201,27 @@ class LoadMotionMasks(object):
             path = info['path']
             tokens = path.split('/')[-1].split('.')[0].split('_')
             seq_id, frame_id = int(tokens[1]), int(tokens[3])
-            if seq_id % self.interval == 0:
+            if seq_id % self.interval != 0:
                 pth_file = os.path.join(
                     'data/Waymo/train/motion_masks/',
                     f'0{seq_id:03d}{frame_id:03d}.pth',
                 )
                 if os.path.exists(pth_file):
-                    motion_dict = torch.load(pth_file)
-                    points = res['lidar']['points'][:, :3]
-                    in_range = ((points > self.point_cloud_range[:3]) & (points < self.point_cloud_range[3:]))
-                    in_range = in_range.all(axis=-1)
-                    points = points[in_range]
-                    valid_points = points[motion_dict['valid_idx']]
-                    object_points = valid_points[motion_dict['obj_idx']]
-                    moving_points = valid_points[motion_dict['moving']]
-                    res['lidar']['using_motion_mask'] = np.array(True).astype(np.bool).reshape(1)
+                    try:
+                        motion_dict = torch.load(pth_file)
+                        points = res['lidar']['points'][:, :3]
+                        in_range = ((points > self.point_cloud_range[:3]) & (points < self.point_cloud_range[3:]))
+                        in_range = in_range.all(axis=-1)
+                        points = points[in_range]
+                        valid_points = points[motion_dict['valid_idx']]
+                        object_points = valid_points[motion_dict['obj_idx']]
+                        moving_points = valid_points[motion_dict['moving']]
+                        res['lidar']['using_motion_mask'] = np.array(True).astype(np.bool).reshape(1)
+                    except Exception as e:
+                        print(f'error loading {pth_file}')
+                        print(e)
+                        res['lidar']['using_motion_mask'] = np.array(False).astype(np.bool).reshape(1)
+                        moving_points = np.zeros(shape=(0, 3), dtype=np.float32)
                 else:
                     res['lidar']['using_motion_mask'] = np.array(False).astype(np.bool).reshape(1)
                     moving_points = np.zeros(shape=(0, 3), dtype=np.float32)

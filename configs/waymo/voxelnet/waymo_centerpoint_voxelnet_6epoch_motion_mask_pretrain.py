@@ -175,6 +175,7 @@ data = dict(
         root_path=data_root,
         info_path=test_anno,
         ann_file=test_anno,
+        test_mode=True,
         nsweeps=nsweeps,
         class_names=class_names,
         pipeline=test_pipeline,
@@ -196,7 +197,7 @@ lr_config = dict(
 checkpoint_config = dict(interval=1)
 # yapf:disable
 log_config = dict(
-    interval=5,
+    interval=100,
     hooks=[
         dict(type="TextLoggerHook"),
         # dict(type='TensorboardLoggerHook')
@@ -204,7 +205,7 @@ log_config = dict(
 )
 # yapf:enable
 # runtime settings
-total_epochs = 6
+total_epochs = 12
 device_ids = range(8)
 dist_params = dict(backend="nccl", init_method="env://")
 log_level = "INFO"

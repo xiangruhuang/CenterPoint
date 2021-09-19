@@ -146,10 +146,8 @@ class SpMiddleResNetFHD(nn.Module):
         )
 
     def forward(self, voxel_features, coors, batch_size, input_shape):
-
-        # input: # [41, 1600, 1408]
         sparse_shape = np.array(input_shape[::-1]) + [1, 0, 0]
-
+        
         coors = coors.int()
         ret = spconv.SparseConvTensor(voxel_features, coors, sparse_shape, batch_size)
 

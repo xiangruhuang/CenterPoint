@@ -31,6 +31,7 @@ class VoxelNetSSL(SingleStageDetector):
         return x, voxel_feature
 
     def forward(self, example, return_loss=True, **kwargs):
+
         voxels = example["voxels"]
         coordinates = example["coordinates"]
         num_points_in_voxel = example["num_points"]

@@ -28,6 +28,7 @@ def _allreduce_coalesced(tensors, world_size, bucket_size_mb=-1):
             tensor.copy_(synced)
 
 
+
 def allreduce_grads(params, coalesce=True, bucket_size_mb=-1):
     grads = [
         param.grad.data

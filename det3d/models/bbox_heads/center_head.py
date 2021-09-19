@@ -252,87 +252,93 @@ class CenterHead(nn.Module):
 
     def loss(self, example, preds_dicts, **kwargs):
         rets = []
-       
         mmask = example['using_motion_mask']
         ret = {}
+        for i in range(len(preds_dicts)):
+            preds_dicts[i]['hm'] = self._sigmoid(preds_dicts[i]['hm'])
+
+        # try to filter with mmask
+        max_hm = preds_dicts[0]['hm'].max(1)[0].unsqueeze(1)
+        motion_hm = example['motion_hm'].unsqueeze(1)
         if mmask.any():
-            sigmoid_hms = self._sigmoid(preds_dicts[0]['hm'])
-            max_hm = sigmoid_hms.max(1)[0].unsqueeze(1)
-            max_hm = max_hm[mmask].view(-1, 1, max_hm.shape[2], max_hm.shape[3])
-            motion_hm = example['motion_hm'].unsqueeze(1)
-            motion_hm = motion_hm[mmask].view(-1, 1, motion_hm.shape[2], motion_hm.shape[3])
-            masks, cats, peaks = [], [], []
-            max_num_peaks = 0
-            for i in range(motion_hm.shape[0]):
-                px, py = torch.where(motion_hm[i, 0] > 0.5)
-                peak = px * motion_hm.shape[3] + py
-                if peak.shape[0] > max_num_peaks:
-                    max_num_peaks = peak.shape[0]
-                peaks.append(peak)
+            max_hm = max_hm[mmask]
+            motion_hm = motion_hm[mmask]
+        # compute motion mask heatmap loss
+        max_hm = max_hm.view(-1, 1, max_hm.shape[2], max_hm.shape[3])
+        motion_hm = motion_hm.view(-1, 1, motion_hm.shape[2], motion_hm.shape[3])
+        masks, cats, peaks = [], [], []
+        max_num_peaks = 0
+        for i in range(motion_hm.shape[0]):
+            px, py = torch.where(motion_hm[i, 0] > 0.5)
+            peak = px * motion_hm.shape[3] + py
+            if peak.shape[0] > max_num_peaks:
+                max_num_peaks = peak.shape[0]
+            peaks.append(peak)
 
-            for i in range(motion_hm.shape[0]):
-                peak = torch.zeros(max_num_peaks).long().to(peaks[i].device)
-                mask = torch.zeros(max_num_peaks).long().to(peaks[i].device)
-                cat = torch.zeros(max_num_peaks).long().to(peaks[i].device)
-                num_peak = peaks[i].shape[0]
-                peak[:num_peak] = peaks[i]
-                mask[:num_peak] = 1
-                peaks[i] = peak
-                cats.append(cat)
-                masks.append(mask)
-            mask = torch.stack(masks, dim=0).to(max_hm.device)
-            cat = torch.stack(cats, dim=0).to(max_hm.device)
-            peak = torch.stack(peaks, dim=0).to(max_hm.device)
-
-            motion_hm_loss = self.rcrit(
-                max_hm, motion_hm.to(max_hm.device),
-                peak, mask, cat
-            )
-            loss = self.motion_weight * motion_hm_loss
-            ret = {'loss': loss, 'motion_hm_loss': motion_hm_loss.detach().cpu()}
-        else:
-            ret = {'loss': torch.tensor(0.0), 'motion_hm_loss': torch.tensor(0.0)}
+        for i in range(motion_hm.shape[0]):
+            peak = torch.zeros(max_num_peaks).long().to(peaks[i].device)
+            mask = torch.zeros(max_num_peaks).long().to(peaks[i].device)
+            cat = torch.zeros(max_num_peaks).long().to(peaks[i].device)
+            num_peak = peaks[i].shape[0]
+            peak[:num_peak] = peaks[i]
+            mask[:num_peak] = 1
+            peaks[i] = peak
+            cats.append(cat)
+            masks.append(mask)
+        mask = torch.stack(masks, dim=0).to(max_hm.device)
+        cat = torch.stack(cats, dim=0).to(max_hm.device)
+        peak = torch.stack(peaks, dim=0).to(max_hm.device)
+        motion_hm_loss = self.rcrit(
+            max_hm, motion_hm.to(max_hm.device),
+            peak, mask, cat
+        )
+        if not mmask.any():
+            motion_hm_loss = motion_hm_loss * 0
+        loss = self.motion_weight * motion_hm_loss
+        ret = {'loss': loss, 'motion_hm_loss': motion_hm_loss.detach().cpu()}
 
         mmask = (mmask == False)
-        if mmask.any():
-            for task_id, preds_dict in enumerate(preds_dicts):
+        for task_id, preds_dict in enumerate(preds_dicts):
+            if mmask.any():
                 for key in preds_dict.keys():
                     preds_dict[key] = preds_dict[key][mmask]
                 for key in ['ind', 'cat', 'mask', 'hm', 'anno_box']:
                     example[key][task_id] = example[key][task_id][mmask]
 
-                # heatmap focal loss
-                preds_dict['hm'] = self._sigmoid(preds_dict['hm'])
+            # heatmap focal loss
+            # preds_dict['hm'] = self._sigmoid(preds_dict['hm'])
+            
+            hm_loss = self.crit(preds_dict['hm'], example['hm'][task_id], example['ind'][task_id], example['mask'][task_id], example['cat'][task_id])
 
-                hm_loss = self.crit(preds_dict['hm'], example['hm'][task_id], example['ind'][task_id], example['mask'][task_id], example['cat'][task_id])
-
-                target_box = example['anno_box'][task_id]
-                # reconstruct the anno_box from multiple reg heads
-                if self.dataset in ['waymo', 'nuscenes']:
-                    if 'vel' in preds_dict:
-                        preds_dict['anno_box'] = torch.cat((preds_dict['reg'], preds_dict['height'], preds_dict['dim'],
-                                                            preds_dict['vel'], preds_dict['rot']), dim=1)  
-                    else:
-                        preds_dict['anno_box'] = torch.cat((preds_dict['reg'], preds_dict['height'], preds_dict['dim'],
-                                                            preds_dict['rot']), dim=1)   
-                        target_box = target_box[..., [0, 1, 2, 3, 4, 5, -2, -1]] # remove vel target                       
+            target_box = example['anno_box'][task_id]
+            # reconstruct the anno_box from multiple reg heads
+            if self.dataset in ['waymo', 'nuscenes']:
+                if 'vel' in preds_dict:
+                    preds_dict['anno_box'] = torch.cat((preds_dict['reg'], preds_dict['height'], preds_dict['dim'],
+                                                        preds_dict['vel'], preds_dict['rot']), dim=1)  
                 else:
-                    raise NotImplementedError()
-     
-                # Regression loss for dimension, offset, height, rotation            
-                box_loss = self.crit_reg(preds_dict['anno_box'], example['mask'][task_id], example['ind'][task_id], target_box)
+                    preds_dict['anno_box'] = torch.cat((preds_dict['reg'], preds_dict['height'], preds_dict['dim'],
+                                                        preds_dict['rot']), dim=1)   
+                    target_box = target_box[..., [0, 1, 2, 3, 4, 5, -2, -1]] # remove vel target                       
+            else:
+                raise NotImplementedError()
+ 
+            # Regression loss for dimension, offset, height, rotation            
+            box_loss = self.crit_reg(preds_dict['anno_box'], example['mask'][task_id], example['ind'][task_id], target_box)
 
-                loc_loss = (box_loss*box_loss.new_tensor(self.code_weights)).sum()
-                
-                loss = ret.get('loss', torch.tensor(0.0))
-                loss = loss.to(hm_loss)
-                loss += hm_loss + self.weight*loc_loss
+            loc_loss = (box_loss*box_loss.new_tensor(self.code_weights)).sum()
+            
+            if not mmask.any():
+                hm_loss = hm_loss * 0
+                loc_loss = loc_loss * 0
+                box_loss = box_loss * 0
+                example['mask'][task_id][:] = 0
+            
+            loss = ret.get('loss', torch.tensor(0.0))
+            loss = loss.to(hm_loss)
+            loss += hm_loss + self.weight*loc_loss
 
-                ret.update({'loss': loss, 'hm_loss': hm_loss.detach().cpu(), 'loc_loss':loc_loss, 'loc_loss_elem': box_loss.detach().cpu(), 'num_positive': example['mask'][task_id].float().sum()})
-        else:
-            ret.update({'hm_loss': torch.tensor(0.0), 'loc_loss': torch.tensor(0.),
-                        'loc_loss_elem': torch.zeros(8),
-                        'num_positive': torch.zeros(0).long()})
+            ret.update({'loss': loss, 'hm_loss': hm_loss.detach().cpu(), 'loc_loss':loc_loss, 'loc_loss_elem': box_loss.detach().cpu(), 'num_positive': example['mask'][task_id].float().sum()})
 
         rets = [ret]
         """convert batch-key to key-batch

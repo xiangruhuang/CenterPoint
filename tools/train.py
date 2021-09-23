@@ -110,6 +110,7 @@ def main():
     model = build_detector(cfg.model, train_cfg=cfg.train_cfg, test_cfg=cfg.test_cfg)
 
     datasets = [build_dataset(cfg.data.train)]
+    print(datasets[0][0])
 
     if len(cfg.workflow) == 2:
         datasets.append(build_dataset(cfg.data.val))

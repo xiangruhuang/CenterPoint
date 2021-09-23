@@ -129,16 +129,29 @@ train_pipeline = [
     dict(type="LoadPointCloudFromFile", dataset=dataset_type),
     dict(type="LoadPointCloudAnnotations", with_bbox=True),
     dict(type="Preprocess", cfg=train_preprocessor),
-    dict(type="ExtractPrimitives", voxel_size=primitive_voxel_size, visualize=False),
-    dict(type="AssignLabel", cfg=train_cfg["assigner"]),
+    dict(
+        type="ExtractPrimitives",
+        voxel_size=primitive_voxel_size,
+        visualize=True,
+        ),
+    #dict(
+    #    type="RadiusGraph",
+    #    radius=[0.1, 0.5, 1.0],
+    #    visualize=True,
+    #    ),
+    dict(type="AssignLabelToPrimitives", cfg=train_cfg["assigner"]),
     dict(type="Reformat"),
 ]
 test_pipeline = [
     dict(type="LoadPointCloudFromFile", dataset=dataset_type),
     dict(type="LoadPointCloudAnnotations", with_bbox=True),
     dict(type="Preprocess", cfg=val_preprocessor),
-    dict(type="ExtractPrimitives", voxel_size=primitive_voxel_size),
-    dict(type="AssignLabel", cfg=train_cfg["assigner"]),
+    dict(
+        type="ExtractPrimitives",
+        voxel_size=primitive_voxel_size,
+        visualize=False
+        ),
+    dict(type="AssignLabelToPrimitives", cfg=train_cfg["assigner"]),
     dict(type="Reformat"),
 ]
 

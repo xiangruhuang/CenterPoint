@@ -5,7 +5,7 @@ from .formating import Reformat
 from .loading import *
 from .test_aug import DoubleFlip
 from .preprocess import Preprocess, Voxelization
-from .primitives import ExtractPrimitives
+from .primitives import ExtractPrimitives, RadiusGraph
 
 __all__ = [
     "Compose",
@@ -24,4 +24,5 @@ __all__ = [
     "AssignTarget",
     "AssignLabel",
     "ExtractPrimitives",
+    "RadiusGraph",
 ]

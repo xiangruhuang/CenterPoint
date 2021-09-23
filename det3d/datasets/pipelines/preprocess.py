@@ -282,7 +282,7 @@ class AssignLabel(object):
 
     def __call__(self, res, info):
         max_objs = self._max_objs
-        import ipdb; ipdb.set_trace()
+
         class_names_by_task = [t.class_names for t in self.tasks]
         num_classes_by_task = [t.num_class for t in self.tasks]
 

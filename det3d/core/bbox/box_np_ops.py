@@ -309,13 +309,13 @@ def box2d_to_corner_jit(boxes):
 
 def rbbox3d_to_corners(rbboxes, origin=[0.5, 0.5, 0.5], axis=2):
     return center_to_corner_box3d(
-        rbboxes[..., :3], rbboxes[..., 3:6], rbboxes[..., 6], origin, axis=axis
+        rbboxes[..., :3], rbboxes[..., 3:6], rbboxes[..., -1], origin, axis=axis
     )
 
 
 def rbbox3d_to_bev_corners(rbboxes, origin=0.5):
     return center_to_corner_box2d(
-        rbboxes[..., :2], rbboxes[..., 3:5], rbboxes[..., 6], origin
+        rbboxes[..., :2], rbboxes[..., 3:5], rbboxes[..., -1], origin
     )
 
 

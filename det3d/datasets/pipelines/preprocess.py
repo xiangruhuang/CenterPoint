@@ -70,7 +70,7 @@ class Preprocess(object):
                 "gt_names": np.array(anno_dict["names"]).reshape(-1),
             }
 
-        if self.mode == "train" and not self.no_augmentation and (not res['lidar']['using_motion_mask']):
+        if self.mode == "train" and not self.no_augmentation:
             selected = drop_arrays_by_name(
                 gt_dict["gt_names"], ["DontCare", "ignore", "UNKNOWN"]
             )

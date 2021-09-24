@@ -304,6 +304,29 @@ class CenterHead(nn.Module):
                     preds_dict[key] = preds_dict[key][mmask]
                 for key in ['ind', 'cat', 'mask', 'hm', 'anno_box']:
                     example[key][task_id] = example[key][task_id][mmask]
+            
+            #if True:
+            #    batch_size = mmask.shape[0]
+            #    from det3d.core.utils.visualization import Visualizer
+            #    vis = Visualizer([0.1, 0.1, 0.15], [-75.2, -75.2])
+            #    points = example['points']
+            #    for i in range(batch_size):
+            #        vis.clear()
+            #        hms = []
+            #        for j in range(preds_dict['hm'].shape[1]):
+            #            hms.append(preds_dict['hm'][i, j].detach().cpu())
+            #        for j, hm in enumerate(hms):
+            #            vis.heatmap(f'hm-{j}', hm)
+            #            vis.heatmap(f'GT-hm-{j}', example['hm'][0][i, j].detach().cpu())
+            #        gt_box = example['gt_boxes_and_cls'][i, :, :-1]
+            #        gt_box = gt_box[example['mask'][task_id][i]]
+            #        vis.pointcloud('points', points[points[:, 0] == i, 1:4].detach().cpu())
+            #        from det3d.core.bbox import box_np_ops
+            #        gt_box = gt_box.detach().cpu().numpy()
+            #        corners = box_np_ops.center_to_corner_box3d(
+            #            gt_box[:, :3], gt_box[:, 3:6], gt_box[:, 6], axis=2)
+            #        vis.boxes('boxes', corners)
+            #        vis.show()
 
             # heatmap focal loss
             # preds_dict['hm'] = self._sigmoid(preds_dict['hm'])
@@ -359,7 +382,6 @@ class CenterHead(nn.Module):
         metas = []
 
         double_flip = test_cfg.get('double_flip', False)
-
         post_center_range = test_cfg.post_center_limit_range
         if len(post_center_range) > 0:
             post_center_range = torch.tensor(
@@ -483,7 +505,7 @@ class CenterHead(nn.Module):
             if test_cfg.get('per_class_nms', False):
                 pass 
             else:
-                rets.append(self.post_processing(batch_box_preds, batch_hm, test_cfg, post_center_range, task_id)) 
+                rets.append(self.post_processing(batch_box_preds, batch_hm, test_cfg, post_center_range, task_id))
 
         # Merge branches results
         ret_list = []

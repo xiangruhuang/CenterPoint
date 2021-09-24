@@ -13,6 +13,7 @@ from det3d.core import box_np_ops
 import pickle 
 import os 
 from ..registry import PIPELINES
+from torch_scatter import scatter
 
 def _dict_select(dict_, inds):
     for k, v in dict_.items():
@@ -216,6 +217,13 @@ class LoadMotionMasks(object):
                         valid_points = points[motion_dict['valid_idx']]
                         object_points = valid_points[motion_dict['obj_idx']]
                         moving_points = valid_points[motion_dict['moving']]
+                        moving_clusters = motion_dict['point2cluster'][motion_dict['moving']]
+                        centers = scatter(
+                                    torch.from_numpy(moving_points),
+                                    torch.from_numpy(moving_clusters).long(),
+                                    dim=0, dim_size=moving_clusters.max()+1,
+                                    reduce='mean')
+                        res['lidar']['moving_points'] = centers[np.unique(moving_clusters)]
                         res['lidar']['using_motion_mask'] = np.array(True).astype(np.bool).reshape(1)
                     except Exception as e:
                         print(f'error loading {pth_file}')

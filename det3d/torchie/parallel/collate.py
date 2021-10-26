@@ -159,8 +159,8 @@ def collate_kitti(batch_list, samples_per_gpu=1):
         else:
             ret[key] = np.stack(elems, axis=0)
 
-    if 'points' in ret:
-        ret.pop('points')
+    #if 'points' in ret:
+    #    ret.pop('points')
     if 'moving_points' in ret:
         ret.pop('moving_points')
     return ret

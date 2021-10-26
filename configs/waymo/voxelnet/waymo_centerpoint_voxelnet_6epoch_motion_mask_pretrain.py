@@ -40,9 +40,9 @@ model = dict(
         tasks=tasks,
         dataset='waymo',
         weight=2,
-        motion_weight=5,
+        motion_weight=0.00,
         code_weights=[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
-        common_heads={'reg': (2, 2), 'height': (1, 2), 'dim':(3, 2), 'rot':(2, 2)}, # (output_channel, num_conv)
+        common_heads={'reg': (2, 2), 'height': (1, 2), 'dim':(3, 2), 'rot':(2, 2), 'moving':(1, 2)}, # (output_channel, num_conv)
     ),
 )
 
@@ -54,10 +54,13 @@ assigner = dict(
     max_objs=500,
     min_radius=2,
     with_motion_mask=True,
+    gaussian_radius=0,
 )
 
 
-train_cfg = dict(assigner=assigner)
+train_cfg = dict(
+                 assigner=assigner,
+                )
 
 
 test_cfg = dict(
@@ -66,8 +69,8 @@ test_cfg = dict(
         use_rotate_nms=True,
         use_multi_class_nms=False,
         nms_pre_max_size=4096,
-        nms_post_max_size=500,
-        nms_iou_threshold=0.7,
+        nms_post_max_size=100,
+        nms_iou_threshold=0.05,
     ),
     score_threshold=0.1,
     pc_range=[-75.2, -75.2],
@@ -107,9 +110,9 @@ db_sampler = dict(
 train_preprocessor = dict(
     mode="train",
     shuffle_points=True,
-    global_rot_noise=[-0.78539816, 0.78539816],
-    global_scale_noise=[0.95, 1.05],
-    db_sampler=db_sampler,
+    global_rot_noise=[0,0], #[-0.78539816, 0.78539816],
+    global_scale_noise=[1., 1.], #[0.95, 1.05],
+    db_sampler=None, #db_sampler,
     class_names=class_names,
     with_motion_mask=True,
 )
@@ -129,7 +132,7 @@ voxel_generator = dict(
 train_pipeline = [
     dict(type="LoadPointCloudFromFile", dataset=dataset_type),
     dict(type="LoadPointCloudAnnotations", with_bbox=True),
-    dict(type="LoadMotionMasks", interval=10),
+    dict(type="LoadMotionMasks", seq_interval=9, frame_interval=None, granularity='point'),
     dict(type="Preprocess", cfg=train_preprocessor),
     dict(type="Voxelization", cfg=voxel_generator),
     dict(type="AssignLabel", cfg=train_cfg["assigner"]),
@@ -149,7 +152,7 @@ val_anno = "data/Waymo/infos_val_01sweeps_filter_zero_gt.pkl"
 test_anno = None
 
 data = dict(
-    samples_per_gpu=4,
+    samples_per_gpu=2,
     workers_per_gpu=4,
     train=dict(
         type=dataset_type,
@@ -194,10 +197,10 @@ lr_config = dict(
     type="one_cycle", lr_max=0.003, moms=[0.95, 0.85], div_factor=10.0, pct_start=0.4,
 )
 
-checkpoint_config = dict(interval=1)
+checkpoint_config = dict(interval=100)
 # yapf:disable
 log_config = dict(
-    interval=100,
+    interval=1,
     hooks=[
         dict(type="TextLoggerHook"),
         # dict(type='TensorboardLoggerHook')
@@ -205,7 +208,7 @@ log_config = dict(
 )
 # yapf:enable
 # runtime settings
-total_epochs = 12
+total_epochs = 1200
 device_ids = range(8)
 dist_params = dict(backend="nccl", init_method="env://")
 log_level = "INFO"

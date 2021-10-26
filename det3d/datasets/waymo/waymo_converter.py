@@ -22,18 +22,29 @@ tf.enable_v2_behavior()
 fnames = None 
 LIDAR_PATH = None
 ANNO_PATH = None 
-prefix = 1 # validation
 
 def convert(idx):
     global fnames, prefix
     fname = fnames[idx]
+    if 'tfrecord_validation' in fname:
+        prefix = 1
+        split='training'
+    elif 'tfrecord_training' in fname:
+        prefix = 0
+        split='training'
+    elif 'tfrecord_testing' in fname:
+        prefix = 2
+        split='testing'
+    else:
+        raise ValueError('UnExpected tfrecord file name')
+
     dataset = tf.data.TFRecordDataset(fname, compression_type='')
     
     for frame_id, data in enumerate(dataset):
         frame = dataset_pb2.Frame()
         frame.ParseFromString(bytearray(data.numpy()))
         decoded_frame = waymo_decoder.decode_frame(frame, frame_id)
-        bin_filepath = f'/mnt/xrhuang/datasets/waymo/kitti_format/training/velodyne/{prefix}{idx:03d}{frame_id:03d}.bin'
+        bin_filepath = f'/mnt/xrhuang/datasets/waymo/kitti_format/{split}/velodyne/{prefix}{idx:03d}{frame_id:03d}.bin'
         
         #points = np.fromfile(bin_filepath, dtype=np.float32).reshape(-1, 6)
         decoded_frame.pop('lidars')

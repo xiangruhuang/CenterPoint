@@ -183,18 +183,29 @@ class LoadPointCloudFromFile(object):
 
         return res, info
 
-
 @PIPELINES.register_module
 class LoadMotionMasks(object):
     def __init__(self,
                  #point_cloud_range = [-75.2, -75.2, 0.3, 75.2, 75.2, 4],
                  point_cloud_range = [-74.88, -74.88, 0.3, 74.88, 74.88, 4],
                  visualize=False,
-                 interval=1,
+                 seq_interval=1,
+                 frame_interval=None,
+                 granularity='cluster',
                  **kwargs):
         self.point_cloud_range = point_cloud_range
         self.visualize = visualize
-        self.interval = interval
+        self.seq_interval = seq_interval
+        self.frame_interval = frame_interval
+        self.granularity = granularity
+
+    def is_available(self, seq_id, frame_id):
+        if seq_id % self.seq_interval == 0:
+            return False
+        if self.frame_interval is not None:
+            if frame_id % self.frame_interval == 0:
+                return False
+        return True
 
     def __call__(self, res, info):
 
@@ -202,11 +213,13 @@ class LoadMotionMasks(object):
             path = info['path']
             tokens = path.split('/')[-1].split('.')[0].split('_')
             seq_id, frame_id = int(tokens[1]), int(tokens[3])
-            if seq_id % self.interval != 0:
+            if self.is_available(seq_id, frame_id):
+                # using motion mask of this sample
                 pth_file = os.path.join(
                     'data/Waymo/train/motion_masks/',
                     f'0{seq_id:03d}{frame_id:03d}.pth',
                 )
+                print(pth_file)
                 if os.path.exists(pth_file):
                     try:
                         motion_dict = torch.load(pth_file)
@@ -217,13 +230,18 @@ class LoadMotionMasks(object):
                         valid_points = points[motion_dict['valid_idx']]
                         object_points = valid_points[motion_dict['obj_idx']]
                         moving_points = valid_points[motion_dict['moving']]
-                        moving_clusters = motion_dict['point2cluster'][motion_dict['moving']]
-                        centers = scatter(
-                                    torch.from_numpy(moving_points),
-                                    torch.from_numpy(moving_clusters).long(),
-                                    dim=0, dim_size=moving_clusters.max()+1,
-                                    reduce='mean')
-                        res['lidar']['moving_points'] = centers[np.unique(moving_clusters)]
+                        if self.granularity == 'point':
+                            pass
+                        elif self.granularity == 'cluster':
+                            moving_clusters = motion_dict['point2cluster'][motion_dict['moving']]
+                            centers = scatter(
+                                        torch.from_numpy(moving_points),
+                                        torch.from_numpy(moving_clusters).long(),
+                                        dim=0, dim_size=moving_clusters.max()+1,
+                                        reduce='mean')
+                            moving_points = centers[np.unique(moving_clusters)].numpy()
+                        else:
+                            raise ValueError('granularity must be "cluster" or "point"')
                         res['lidar']['using_motion_mask'] = np.array(True).astype(np.bool).reshape(1)
                     except Exception as e:
                         print(f'error loading {pth_file}')

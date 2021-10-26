@@ -5,7 +5,7 @@ from .formating import Reformat
 from .loading import *
 from .test_aug import DoubleFlip
 from .preprocess import Preprocess, Voxelization
-from .motion_masks import AssignMotionLabel
+from .motion_masks import EstimateMotionMask
 
 __all__ = [
     "Compose",
@@ -23,5 +23,5 @@ __all__ = [
     "Voxelization",
     "AssignTarget",
     "AssignLabel"
-    "AssignMotionLabel",
+    "EstimateMotionMask",
 ]

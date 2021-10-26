@@ -293,6 +293,7 @@ class AssignLabel(object):
         self._max_objs = assigner_cfg.max_objs
         self._min_radius = assigner_cfg.min_radius
         self.with_motion_mask = assigner_cfg.get('with_motion_mask', False)
+        self.radius = assigner_cfg.get('gaussian_radius', 2)
 
     def __call__(self, res, info):
         max_objs = self._max_objs
@@ -363,12 +364,13 @@ class AssignLabel(object):
                 mx, my = moving_points[:, :2].T
                 mx = (mx - pc_range[0]) / voxel_size[0] / self.out_size_factor
                 my = (my - pc_range[1]) / voxel_size[1] / self.out_size_factor
+                indices = my * feature_map_size[0] + mx
                 mxy = np.stack([mx, my], axis=-1).astype(np.int32)
                 mxy = np.unique(mxy, axis=0)
-                radius = 2
+                radius = self.radius
                 for m_int in mxy:
                     draw_gaussian(motion_hm[0], m_int, radius)
-                if False:
+                if True:
                     from det3d.core.utils.visualization import Visualizer
                     vis = Visualizer([0.1, 0.1, 0.15], [-75.2, -75.2])
                     vis.clear()

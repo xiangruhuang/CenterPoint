@@ -1,4 +1,5 @@
 from ..registry import PIPELINES
+from collections import defaultdict
 import numpy as np
 import pickle
 import os
@@ -11,22 +12,19 @@ from det3d.ops.primitives.primitives_cpu import (
     voxelization, voxel_graph,
     query_point_correspondence as query_corres,
 )
-#from det3d.solver import ARAPSolver as ARAPSolver
 from det3d.solver import ARAPGDSolver as ARAPSolver
 import open3d as o3d
+from det3d.core.bbox import box_np_ops
+from det3d.structures import Sequence
 
-def get_pickle(path):
-    with open(path, 'rb') as fin:
-        return pickle.load(fin)
-
-def generate_sequential_colors(c0, c1, num_frames):
-    c0, c1 = np.array(c0), np.array(c1)
-    ratios = np.linspace(0, 1, num_frames)
-    colors = []
-    for r in ratios:
-        colors.append((1-r)*c0 + r*c1)
-
-    return np.stack(colors, axis=0)
+#def generate_sequential_colors(c0, c1, num_frames):
+#    c0, c1 = np.array(c0), np.array(c1)
+#    ratios = np.linspace(0, 1, num_frames)
+#    colors = []
+#    for r in ratios:
+#        colors.append((1-r)*c0 + r*c1)
+#
+#    return np.stack(colors, axis=0)
 
 @PIPELINES.register_module
 class EstimateMotionMask(object):
@@ -44,77 +42,83 @@ class EstimateMotionMask(object):
             self.pc_range = point_cloud_range
         self.visualize = visualize
 
-    def load_and_sync_frames(self, res, info):
+    def load_lidar_sequence(self, res, info):
         """Load points from adjacent frames into the current coordinate system.
 
         """
-        anno = get_pickle(info['anno_path'])
-        T = anno['veh_to_global'].reshape(4, 4)
-        Tinv = np.linalg.inv(T)
-        sweep_points = [res['lidar']['points'][:, :3]]
-        origins = [np.array([0,0,2.0], dtype=np.float32)]
-        # frames in decreasing order
-        for i, s in enumerate(info['sweeps']):
-            lidar_file = get_pickle(s['path'])['lidars']
-            anno_dict = get_pickle(s['path'].replace('lidar', 'annos'))
-            points = np.fromfile(lidar_file, dtype=np.float32).reshape(-1, 6)[:, :3]
-            Ti = Tinv @ anno_dict['veh_to_global'].reshape(4, 4)
-            points = points @ Ti[:3, :3].T + Ti[:3, 3]
-            sweep_points.append(points)
-            origin = np.zeros(3)
-            origin = Ti[:3, :3] @ origin + Ti[:3, 3]
-            origins.append(origin)
-        sweep_points = sweep_points[::-1]
-        origins = origins[::-1]
+        seq = Sequence(info)
+        seq.toglobal()
+        origins = seq.camera_trajectory()
+        #seq.transform()
+        #anno = get_pickle(info['anno_path'])
+        #T = anno['veh_to_global'].reshape(4, 4)
+        #Tinv = np.linalg.inv(T)
+        #sweep_points = []
+        #origins = []
+        #info['sweeps'].append(dict(path=info['path']))
+        ## frames in decreasing order
+        #for i, s in enumerate(info['sweeps']):
+        #    lidar_file = get_pickle(s['path'])['lidars']
+        #    anno_dict = get_pickle(s['path'].replace('lidar', 'annos'))
+        #    points = np.fromfile(lidar_file, dtype=np.float32).reshape(-1, 6)[:, :3]
+        #    Ti = Tinv @ anno_dict['veh_to_global'].reshape(4, 4)
+        #    points = points @ Ti[:3, :3].T + Ti[:3, 3]
+        #    sweep_points.append(points)
+        #    origin = np.zeros(3)
+        #    origin = Ti[:3, :3] @ origin + Ti[:3, 3]
+        #    origins.append(origin)
+        #sweep_points = sweep_points[::-1]
+        #origins = origins[::-1]
 
-        center_frame_id = len(sweep_points) - 1
-        # frames in increasing order
-        for i, s in enumerate(info['reverse_sweeps']):
-            lidar_file = get_pickle(s['path'])['lidars']
-            anno_dict = get_pickle(s['path'].replace('lidar', 'annos'))
-            points = np.fromfile(lidar_file, dtype=np.float32).reshape(-1, 6)[:, :3]
-            Ti = Tinv @ anno_dict['veh_to_global'].reshape(4, 4)
-            points = points @ Ti[:3, :3].T + Ti[:3, 3]
-            sweep_points.append(points)
-            origin = np.zeros(3)
-            origin = Ti[:3, :3] @ origin + Ti[:3, 3]
-            origins.append(origin)
-        origins = np.stack(origins, axis=0)
+        #center_frame_id = len(sweep_points) - 1
+        ## frames in increasing order
+        #for i, s in enumerate(info['reverse_sweeps']):
+        #    lidar_file = get_pickle(s['path'])['lidars']
+        #    anno_dict = get_pickle(s['path'].replace('lidar', 'annos'))
+        #    points = np.fromfile(lidar_file, dtype=np.float32).reshape(-1, 6)[:, :3]
+        #    Ti = Tinv @ anno_dict['veh_to_global'].reshape(4, 4)
+        #    points = points @ Ti[:3, :3].T + Ti[:3, 3]
+        #    sweep_points.append(points)
+        #    origin = np.zeros(3)
+        #    origin = Ti[:3, :3] @ origin + Ti[:3, 3]
+        #    origins.append(origin)
+        #origins = np.stack(origins, axis=0)
 
-        return center_frame_id, sweep_points, origins
+        #return center_frame_id, sweep_points, origins 
+        return seq, origins
 
-    def range_filter_points(self, points):
-        """Filter points that are not in range of `self.pc_range`
+    #def range_filter_points(self, points):
+    #    """Filter points that are not in range of `self.pc_range`
 
-        """
-        masks = []
-        new_points = []
-        for pi in points:
-            mask = None
-            for i in range(3):
-                mask_i = (pi[:, i] >= self.pc_range[i]) & (pi[:, i] <= self.pc_range[i+3])
-                if mask is None:
-                    mask = mask_i
-                else:
-                    mask = mask & mask_i
-            masks.append(mask)
-            new_points.append(pi[mask])
-        return masks, new_points
+    #    """
+    #    masks = []
+    #    new_points = []
+    #    for pi in points:
+    #        mask = None
+    #        for i in range(3):
+    #            mask_i = (pi[:, i] >= self.pc_range[i]) & (pi[:, i] <= self.pc_range[i+3])
+    #            if mask is None:
+    #                mask = mask_i
+    #            else:
+    #                mask = mask & mask_i
+    #        masks.append(mask)
+    #        new_points.append(pi[mask])
+    #    return masks, new_points
 
-    def filter_lines(self, _points):
-        """Filter points that are lines or isolated points.
-        
-        """
-        points = torch.as_tensor(_points)
-        e0, e1 = radius(points, points, r=0.4, max_num_neighbors=64)
-        diff = (points[e0] - points[e1])
-        ppT = (diff.unsqueeze(-1) * diff.unsqueeze(-2)).view(-1, 9)
-        ppT_per_point = scatter(
-            ppT, e0, dim=0,
-            dim_size=points.shape[0], reduce='sum').view(-1, 3, 3)
-        eigvals = np.linalg.eigvalsh(ppT_per_point.numpy())
-        valid_idx = np.where(eigvals[:, 1] > 0.03)[0]
-        return valid_idx, _points[valid_idx]
+    #def filter_lines(self, _points):
+    #    """Filter points that are lines or isolated points.
+    #    
+    #    """
+    #    points = torch.as_tensor(_points)
+    #    e0, e1 = radius(points, points, r=0.4, max_num_neighbors=64)
+    #    diff = (points[e0] - points[e1])
+    #    ppT = (diff.unsqueeze(-1) * diff.unsqueeze(-2)).view(-1, 9)
+    #    ppT_per_point = scatter(
+    #        ppT, e0, dim=0,
+    #        dim_size=points.shape[0], reduce='sum').view(-1, 3, 3)
+    #    eigvals = np.linalg.eigvalsh(ppT_per_point.numpy())
+    #    valid_idx = np.where(eigvals[:, 1] > 0.03)[0]
+    #    return valid_idx, _points[valid_idx]
 
     def voxelize(self, points, voxel_size=[1, 1]):
         """ voxelize the points
@@ -202,7 +206,7 @@ class EstimateMotionMask(object):
 
         return x
 
-    def filter_ground(self, sweep_points, rel_threshold=0.2):
+    def filter_ground(self, seq, rel_threshold=0.2):
         """Reconstruct the ground of the entire scene.
 
         Args:
@@ -214,7 +218,7 @@ class EstimateMotionMask(object):
             filtered_points
 
         """
-
+        sweep_points = [f.points for f in seq.frames]
         filename = f'data/Waymo/train/ssl/ground_{self.seq_id}.pt'
         if not os.path.exists(filename):
             _points_all = np.concatenate(sweep_points, axis=0)
@@ -256,8 +260,9 @@ class EstimateMotionMask(object):
                 
                 rel_height = z - ground_heights[(coord_2d[:, 0], coord_2d[:, 1])]
                 valid_mask = torch.where(rel_height > rel_threshold)[0]
-                filtered_points.append(s[valid_mask])
-                valid_masks.append(valid_mask)
+                #filtered_points.append(s[valid_mask])
+                #valid_masks.append(valid_mask)
+                seq.frames[i].filter(valid_mask)
 
             save_dict = dict(masks=valid_masks, num_points=num_points)
             torch.save(save_dict, filename)
@@ -269,75 +274,100 @@ class EstimateMotionMask(object):
             filtered_points = []
             for i, s in enumerate(sweep_points):
                 assert s.shape[0] == num_points[i]
-                filtered_points.append(s[valid_masks[i]])
+                seq.frames[i].filter(valid_masks[i])
+                #filtered_points.append(s[valid_masks[i]])
+        #return valid_masks, filtered_points
 
-        return valid_masks, filtered_points
+    #def load_and_sync_annos(self, res, info, filter_other=True):
+    #    """Load GT boxes, tracking ids from frames (only for debug).
 
-    def load_boxes_and_sync(self, res, info, filter_other=True):
-        """Load GT boxes from frames (only for debug).
+    #    Args:
+    #        filter_other: if True, filter ignored boxes
 
-        Args:
-            filter_other: if True, filter ignored boxes
+    #    Returns:
+    #        annos (dict): containing
+    #            - corners (list[np.ndarray(N, 8, 3)]): box corners per frame
+    #            - classes (list[np.ndarray(N)]: box classes per frame
+    #            - tokens (list[np.array(dtype=str)]): tracking UIDs
+    #            - frame_ids (list[np.ndarray(N)]): frame indices
+    #    
+    #    """
+    #    from det3d.datasets.waymo.waymo_common import TYPE_LIST
+    #    #boxes = info['gt_boxes']
+    #    corners, classes, tokens, frame_ids, boxes = [], [], [], [], []
+    #    cls_map = {'VEHICLE':0, 'PEDESTRIAN':1, 'CYCLIST':2}
+    #    label_map = {0:-1, 1:0, 2:1, 3:-1, 4:2}
+    #    #classes = info['gt_names'].tolist()
+    #    #classes = [np.array([cls_map.get(cls, -1) for cls in classes])]
+    #    anno = get_pickle(info['anno_path'])
+    #    T = anno['veh_to_global'].reshape(4, 4)
+    #    Tinv = np.linalg.inv(T)
+    #    tm = defaultdict(lambda: np.eye(4))
+    #    # frames in decreasing order
+    #    for i, s in enumerate(info['sweeps']):
+    #        lidar_file = get_pickle(s['path'])['lidars']
+    #        anno_dict = get_pickle(s['path'].replace('lidar', 'annos'))
+    #        frame_id = int(s['path'].split('/')[-1].split('.')[0].split('_')[3])
+    #        Ti = Tinv @ anno_dict['veh_to_global'].reshape(4, 4)
+    #        tm[frame_id] = Ti
+    #        boxes_i = np.stack([o['box'] for o in anno_dict['objects']], axis=0)
+    #        tokens_i = np.array([o['name'] for o in anno_dict['objects']]).astype(str)
+    #        cls = [label_map[o['label']] if o['num_points'] > 0 else -1 for o in anno_dict['objects']]
+    #        classes.append(np.array(cls))
+    #        corners_i = box_np_ops.center_to_corner_box3d(
+    #            boxes_i[:, :3], boxes_i[:, 3:6], boxes_i[:, -1], axis=2)
+    #        corners_i = (
+    #            corners_i.reshape(-1, 3) @ Ti[:3, :3].T + Ti[:3, 3]
+    #            ).reshape(-1, 8, 3)
+    #        corners.append(corners_i)
+    #        tokens.append(tokens_i)
+    #        boxes.append(boxes_i)
+    #        frame_ids.append(np.array([frame_id for i in range(boxes_i.shape[0])]))
+    #    corners = corners[::-1]
+    #    classes = classes[::-1]
+    #    tokens = tokens[::-1]
+    #    frame_ids = frame_ids[::-1]
+    #    boxes = boxes[::-1]
 
-        Returns:
-            corners (list[np.ndarray(N, 8, 3)]): box corners per frame
-            classes (list[np.ndarray(N)]: box classes per frame
-        
-        """
-        from det3d.datasets.waymo.waymo_common import TYPE_LIST
-        from det3d.core.bbox import box_np_ops
-        boxes = info['gt_boxes']
-        corners, classes = [], []
-        corners.append(
-            box_np_ops.center_to_corner_box3d(
-                boxes[:, :3], boxes[:, 3:6], boxes[:, -1], axis=2)
-            )
-        cls_map = {'VEHICLE':0, 'PEDESTRIAN':1, 'CYCLIST':2}
-        label_map = {0:-1, 1:0, 2:1, 3:-1, 4:2}
-        classes = info['gt_names'].tolist()
-        classes = [np.array([cls_map.get(cls, -1) for cls in classes])]
-        anno = get_pickle(info['anno_path'])
-        T = anno['veh_to_global'].reshape(4, 4)
-        Tinv = np.linalg.inv(T)
-        # frames in decreasing order
-        for i, s in enumerate(info['sweeps']):
-            lidar_file = get_pickle(s['path'])['lidars']
-            anno_dict = get_pickle(s['path'].replace('lidar', 'annos'))
-            Ti = Tinv @ anno_dict['veh_to_global'].reshape(4, 4)
-            boxes = np.stack([o['box'] for o in anno_dict['objects']], axis=0)
-            cls = [label_map[o['label']] if o['num_points'] > 0 else -1 for o in anno_dict['objects']]
-            classes.append(np.array(cls))
-            corners_i = box_np_ops.center_to_corner_box3d(
-                boxes[:, :3], boxes[:, 3:6], boxes[:, -1], axis=2)
-            corners_i = (
-                corners_i.reshape(-1, 3) @ Ti[:3, :3].T + Ti[:3, 3]
-                ).reshape(-1, 8, 3)
-            corners.append(corners_i)
-        corners = corners[::-1]
-        classes = classes[::-1]
+    #    # frames in increasing order
+    #    for i, s in enumerate(info['reverse_sweeps']):
+    #        lidar_file = get_pickle(s['path'])['lidars']
+    #        anno_dict = get_pickle(s['path'].replace('lidar', 'annos'))
+    #        Ti = Tinv @ anno_dict['veh_to_global'].reshape(4, 4)
+    #        frame_id = int(s['path'].split('/')[-1].split('.')[0].split('_')[3])
+    #        tm[frame_id] = Ti
+    #        boxes_i = np.stack([o['box'] for o in anno_dict['objects']], axis=0)
+    #        tokens_i = np.array([o['name'] for o in anno_dict['objects']]).astype(str)
+    #        cls = [label_map[o['label']] if o['num_points'] > 0 else -1 for o in anno_dict['objects']]
+    #        classes.append(np.array(cls))
+    #        corners_i = box_np_ops.center_to_corner_box3d(
+    #            boxes_i[:, :3], boxes_i[:, 3:6], boxes_i[:, -1], axis=2)
+    #        corners_i = (
+    #            corners_i.reshape(-1, 3) @ Ti[:3, :3].T + Ti[:3, 3]
+    #            ).reshape(-1, 8, 3)
+    #        corners.append(corners_i)
+    #        tokens.append(tokens_i)
+    #        boxes.append(boxes_i)
+    #        frame_ids.append(np.array([frame_id for i in range(boxes_i.shape[0])]))
 
-        # frames in increasing order
-        for i, s in enumerate(info['reverse_sweeps']):
-            lidar_file = get_pickle(s['path'])['lidars']
-            anno_dict = get_pickle(s['path'].replace('lidar', 'annos'))
-            Ti = Tinv @ anno_dict['veh_to_global'].reshape(4, 4)
-            boxes = np.stack([o['box'] for o in anno_dict['objects']], axis=0)
-            cls = [label_map[o['label']] if o['num_points'] > 0 else -1 for o in anno_dict['objects']]
-            classes.append(np.array(cls))
-            corners_i = box_np_ops.center_to_corner_box3d(
-                boxes[:, :3], boxes[:, 3:6], boxes[:, -1], axis=2)
-            corners_i = (
-                corners_i.reshape(-1, 3) @ Ti[:3, :3].T + Ti[:3, 3]
-                ).reshape(-1, 8, 3)
-            corners.append(corners_i)
+    #    if filter_other:
+    #        for i, (corner, cls) in enumerate(zip(corners, classes)):
+    #            mask = (cls != -1)
+    #            corners[i] = corner[mask]
+    #            classes[i] = cls[mask]
+    #            boxes[i] = boxes[i][mask]
+    #            tokens[i] = tokens[i][mask]
+    #            frame_ids[i] = frame_ids[i][mask]
+    #    
+    #    annos = dict(
+    #        corners=corners,
+    #        classes=classes,
+    #        tokens=tokens,
+    #        boxes=boxes,
+    #        frame_ids=frame_ids,
+    #        transformations=tm)
 
-        if filter_other:
-            for i, (corner, cls) in enumerate(zip(corners, classes)):
-                mask = (cls != -1)
-                corners[i] = corner[mask]
-                classes[i] = cls[mask]
-
-        return corners, classes
+    #    return annos
 
     def undersegment(self, sweep_points, radius=1.0):
         """Compute under-segments of each frame.
@@ -367,63 +397,17 @@ class EstimateMotionMask(object):
 
         return num_clusters, cluster_ids
 
-    def temporal_voxelization(self, sweep_points, voxel_size):
-        """Group points in all frame in spatio-temporal (4D) voxels
-        Args:
-            sweep_points (list[np.ndarray]): points in each frame
-            voxel_size (torch.tensor, shape=[4]): spatio-temporal voxel size
 
-        Returns:
-            points (N, 4): (x,y,z,t) 4D points
-            normals (N, 3): (nx, ny, nz) normals per point.
-            voxels (V, 4): (x,y,z,t) 4D voxels
-            vp_edges (2, E): (voxel, point) edges
-        """
-        points, normals = [], []
-        for i, s in enumerate(sweep_points):
-            frame_id = np.ones(s.shape[0]).reshape(-1, 1)*i
-            pcd = o3d.geometry.PointCloud()
-            pcd.points = o3d.utility.Vector3dVector(s)
-            pcd.estimate_normals(
-                search_param=o3d.geometry.KDTreeSearchParamHybrid(
-                                 radius=0.5, max_nn=30))
-            normal = np.array(pcd.normals)
-            s = np.concatenate([s, frame_id], axis=-1)
-            points.append(s)
-            normals.append(normal)
-        points = np.concatenate(points, axis=0)
-        points = torch.tensor(points, dtype=torch.float32)
-        normals = np.concatenate(normals, axis=0)
-        normals = torch.tensor(normals, dtype=torch.float32)
-        
-        vp_edges = voxelization(points, voxel_size, False)[0].T.long()
-        num_voxels = vp_edges[0].max() + 1
-        voxels = scatter(points[vp_edges[1]], vp_edges[0], reduce='mean',
-                         dim=0, dim_size=num_voxels)
-        
-        return points, normals, voxels, vp_edges
-
-    def motion_estimate(self, sweep_points,
+    def motion_estimate(self, seq,
                         voxel_size=[0.6, 0.6, 0.6, 1],
-                        #voxel_size=[0.6, 0.6, 0.6, 1],
-                        boxes=None, classes=None,
                         max_iter=10000):
-        """Estimate motion per point.
-        
-        Args:
-            sweep_points (list[np.ndarray]): frames
-            voxel_size (2): voxel size in each dimension
-            
-        Returns:
-            velocity (list[np.ndarray]): velocity per point.
-
-        """
         voxel_size = torch.tensor(voxel_size, dtype=torch.float32)
         points, normals, voxels, vp_edges = \
-            self.temporal_voxelization(sweep_points, voxel_size)
+            seq.temporal_voxelization(voxel_size)
 
         # iterative optimization
-        solver = ARAPSolver(points, normals, voxels, vp_edges, voxel_size, boxes, classes)
+        solver = ARAPSolver(points, normals, voxels, vp_edges,
+                            voxel_size, seq)
         solver.solve(max_iter=max_iter)
 
     def visualize_lidar_lines(self, high_points, sweep_points, _origins):
@@ -438,8 +422,6 @@ class EstimateMotionMask(object):
 
         lines, edges, points = [], [], []
         for i, (_points, _line_points) in enumerate(zip(high_points, sweep_points)):
-            if i >= 1:
-                continue
             line_points = torch.tensor(_line_points, dtype=torch.float32)
             points.append(torch.tensor(_points, dtype=torch.float32))
             origin = origins[i].reshape(-1, 3)
@@ -447,9 +429,10 @@ class EstimateMotionMask(object):
             line = torch.stack([line_points, origin], dim=1).view(-1, 3)
             lines.append(line)
         points = torch.cat(points, dim=0)
-        lines = torch.cat(lines, dim=0)
-        edges = torch.arange(lines.shape[0]).view(-1, 2)
-        vis.curvenetwork('lidar-lines', lines, edges)
+        #for i, line in enumerate(lines):
+        #    edges = torch.arange(line.shape[0]).view(-1, 2)
+        #    vis.curvenetwork(f'lidar-lines-{i}', line, edges)
+            #lines = torch.cat(lines, dim=0)
         vis.pointcloud('points', points)
         import ipdb; ipdb.set_trace()
 
@@ -457,36 +440,8 @@ class EstimateMotionMask(object):
 
     def __call__(self, res, info):
         self.seq_id = int(info['path'].split('/')[-1].split('_')[1])
-        _, sweep_points, origins = self.load_and_sync_frames(res, info)
-        filter_ground_masks, high_points = self.filter_ground(
-                                                sweep_points, rel_threshold=0.5)
-        boxes, classes = self.load_boxes_and_sync(res, info, filter_other=True)
-        self.motion_estimate(high_points, boxes=boxes, classes=classes)
-
-        #from det3d.core.utils.visualization import Visualizer
-        #vis = Visualizer([0.2, 0.2], [-75.2, -75.2], size_factor=1)
-        #vis.pointcloud('points', points_txyz[:, :3])
-        #vis.pointcloud('voxels', voxels_txyz[:, :3])
-
-        if False:
-            #num_clusters, cluster_ids = self.undersegment(high_points)
-            from det3d.core.utils.visualization import SeqVisualizer
-
-            vis = SeqVisualizer([0.2, 0.2], [-75.2, -75.2], size_factor=1)
-            vis.clear()
-            colors = generate_sequential_colors([0,0,0], [1,1,1], len(sweep_points))
-            for i, s in enumerate(high_points):
-                vis.add_frame(
-                    timestamp=i,
-                    points=s,
-                    color=colors[i],
-                    boxes=boxes[i],
-                    labels=classes[i],
-                    origin=origins[i],
-                    #num_clusters=num_clusters[i],
-                    #cluster_ids=cluster_ids[i],
-                    )
-            import ipdb; ipdb.set_trace()
-            vis.visualize_frames(0, 10)
+        seq, origins = self.load_lidar_sequence(res, info)
+        self.filter_ground(seq, rel_threshold=0.5)
+        self.motion_estimate(seq)
         
         return res, info

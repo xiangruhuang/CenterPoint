@@ -7,10 +7,11 @@ from det3d.ops.primitives.primitives_cpu import (
 from torch_scatter import scatter
 import numpy as np
 import scipy
-from scipy.sparse.csgraph import connected_components
 import time
 from PytorchHashmap.torch_hash import HashTable
 from .geometry_utils import *
+from collections import defaultdict
+from .utils import find_graphs
 
 class ARAPGDSolver:
     def __init__(self,
@@ -19,7 +20,7 @@ class ARAPGDSolver:
                  voxels,
                  vp_edges,
                  voxel_size,
-                 boxes, classes,
+                 annos,
                  lamb=10):
         self.device = 'cpu'
         self.dtype = torch.float64
@@ -31,8 +32,12 @@ class ARAPGDSolver:
         self.vp0, self.vp1 = vp_edges.to(self.device)
         self.p2v = torch.zeros(points.shape[0], dtype=torch.long,
                                device=self.device)
-        self.boxes = np.concatenate(boxes, axis=0)
-        self.classes = np.concatenate(classes, axis=0)
+        self.corners = np.concatenate(annos['corners'], axis=0)
+        self.boxes = np.concatenate(annos['boxes'], axis=0)
+        self.classes = np.concatenate(annos['classes'], axis=0)
+        self.object_tokens = np.concatenate(annos['tokens'], axis=0)
+        self.frame_ids = np.concatenate(annos['frame_ids'], axis=0)
+        self.anno_T = annos['transformations']
        
         # find components
         if False:
@@ -92,6 +97,8 @@ class ARAPGDSolver:
         self.construct_time, self.solve_time = 0.0, 0.0
         self.energy = dict(rigid=0.0, reg=0.0)
         self.weight = dict(rigid=10, rigid_f=10, reg_point=0.0, reg_plane=1)
+        from det3d.core.utils.visualization import Visualizer
+        self.vis = Visualizer([0.2, 0.2], [-75.2, -75.2], size_factor=1)
         
         if False:
             # cheating
@@ -130,46 +137,6 @@ class ARAPGDSolver:
             #self.T = torch.eye(4, dtype=self.dtype,
             #                   device=self.device).repeat(self.num_voxels, 1, 1)
 
-    def find_graphs(self, temporal=True, return_subgraphs=False):
-        """Find connected components of the graph defined by
-        self.vv and self.vv_f.
-
-        Returns:
-            graph_indices (list[np.ndarray])
-        """
-        vv0 = self.vv0.cpu()
-        vv1 = self.vv1.cpu()
-        A = csr_matrix((torch.ones_like(vv0), (vv0, vv1)),
-                       shape=(self.num_voxels, self.num_voxels))
-        if temporal:
-            vv0_f = self.active_voxels[self.vv0_f].cpu()
-            vv1_f = self.active_voxels[self.vv1_f].cpu()
-            vv0_b = self.active_voxels[self.vv0_b].cpu()
-            vv1_b = self.active_voxels[self.vv1_b].cpu()
-            B = csr_matrix((torch.ones_like(vv0_f), (vv0_f, vv1_f)),
-                           shape=(self.num_voxels, self.num_voxels))
-            C = csr_matrix((torch.ones_like(vv0_b), (vv0_b, vv1_b)),
-                           shape=(self.num_voxels, self.num_voxels))
-            A = A + B + C
-
-        num_graphs, graph_idx = connected_components(A, directed=False)
-        if return_subgraphs:
-            graph_indices = []
-            for i in range(num_graphs):
-                graph_indices.append(np.where(graph_idx == i)[0])
-            return graph_indices
-        else:
-            return graph_idx
-
-    def trace_point(self, i):
-        tr = torch.stack([self.fpoints[i, :3], self.ref_points[i, :3]], dim=0)
-        edges = torch.tensor([0, 1]).long().view(-1, 2)
-        self.vis.curvenetwork(f'Ptrace-{i}', tr.cpu().numpy(), edges)
-    
-    def trace_voxel(self, i):
-        tr = torch.stack([self.fvoxels[i, :3], self.ref_voxels[i, :3]], dim=0)
-        edges = torch.tensor([0, 1]).long().view(-1, 2)
-        self.vis.curvenetwork(f'Vtrace-{i}', tr.cpu().numpy(), edges)
 
     @torch.no_grad()
     def solve_reg(self):
@@ -426,6 +393,17 @@ class ARAPGDSolver:
         self.fvoxels = self.transform(self.ref_voxels, self.T)
         self.bvoxels = self.transform(self.ref_voxels, inverse(self.T))
 
+    def visualize_frames(self, name, points, normals, voxels):
+        ps_ref = self.vis.pointcloud(f'{name}-points', points[:, :3].cpu().numpy())
+        ps_ref.add_vector_quantity(f'normals', normals[:, :3].cpu().numpy())
+        ps_ref.add_scalar_quantity(f'frame mod 2', points[:, -1].cpu().numpy() % 2, enabled=True)
+        ps_ref.add_scalar_quantity(f'frame', points[:, -1].cpu().numpy(), enabled=True)
+        
+        ps_refv = self.vis.pointcloud(f'{name}-voxels', voxels[:, :3].cpu().numpy())
+        ps_refv.add_scalar_quantity(f'frame mod 2', voxels[:, -1].cpu().numpy() % 2, enabled=True)
+        ps_refv.add_scalar_quantity(f'frame', voxels[:, -1].cpu().numpy(), enabled=False)
+        ps_box = self.vis.boxes(f'{name}-boxes', self.corners, self.classes)
+
     def solve_dense(self):
         num_points = scatter(torch.ones(self.fpoints.shape[0]), self.p2v,
                              reduce='sum', dim=0, dim_size=self.num_voxels)
@@ -434,22 +412,56 @@ class ARAPGDSolver:
         ref_points = self.ref_points[dense_point_indices]
         ref_normals = self.ref_normals[dense_point_indices]
         ref_voxels = self.ref_voxels[dense_voxel_indices]
+        self.vis.boxes('boxes', self.corners, self.classes)
+        self.visualize_object_tracking()
+        self.visualize_frames('full', self.ref_points, self.ref_normals,
+                              self.ref_voxels)
+        self.visualize_frames('dense', ref_points, ref_normals, ref_voxels)
 
+    def visualize_object_tracking(self):
         from det3d.core.utils.visualization import Visualizer
-        self.vis = Visualizer([0.2, 0.2], [-75.2, -75.2], size_factor=1)
-        ps_ref = self.vis.pointcloud('ref-full', self.ref_points[:, :3].cpu().numpy())
-        ps_ref.add_vector_quantity('normals', self.ref_normals[:, :3].cpu().numpy())
-        ps_ref.add_scalar_quantity('frame', self.ref_points[:, -1].cpu().numpy() % 2, enabled=True)
-
-        ps_ref = self.vis.pointcloud('ref', ref_points[:, :3].cpu().numpy())
-        ps_ref.add_vector_quantity('normals', ref_normals[:, :3].cpu().numpy())
-        ps_ref.add_scalar_quantity('frame', ref_points[:, -1].cpu().numpy() % 2, enabled=True)
-        
-        ps_refv = self.vis.pointcloud('ref-V', ref_voxels[:, :3].cpu().numpy())
-        ps_refv.add_scalar_quantity('frame', ref_voxels[:, -1].cpu().numpy() % 2, enabled=True)
-        ps_box = self.vis.boxes('box', self.boxes, self.classes)
+        from det3d.core.bbox import box_np_ops
+        self.vis = Visualizer([0.2, 0.2], [-75.2, -75.2])
+        object_traces = defaultdict(lambda: {'boxes': [], 'labels': [],
+                                             'corners': [], 'frame_ids': []
+                                            })
+        for i, (box, corner, label, token) in enumerate(zip(\
+                self.boxes, self.corners, self.classes, self.object_tokens)):
+            trace = object_traces[token]
+            trace['boxes'].append(box)
+            trace['labels'].append(label)
+            trace['corners'].append(corner)
+            trace['frame_ids'].append(self.frame_ids[i])
+            object_traces[token] = trace
+        self.visualize_frames('all', self.ref_points, self.ref_normals, self.ref_voxels)
         import ipdb; ipdb.set_trace()
-        self.vis.show()
+        for token, trace in object_traces.items():
+            boxes = trace['boxes']
+            corners = trace['corners']
+            boxes = np.stack(boxes, axis=0)
+            corners = np.stack(corners, axis=0)
+            frame_ids = np.array(trace['frame_ids'])
+            labels = np.array(trace['labels']).reshape(-1)
+            self.vis.boxes(f'token-trace', corners, labels)
+            points_synced = []
+            for i in range(boxes.shape[0]):
+                frame_id = frame_ids[i]
+                Ti = self.anno_T[frame_id]
+                mask = self.ref_points[:, -1] == frame_id
+                surfaces = box_np_ops.corner_to_surfaces_3d(corners[i:i+1])
+                indices = box_np_ops.points_in_convex_polygon_3d_jit(
+                        self.ref_points[mask, :3].numpy(), surfaces)[:, 0]
+                points = self.ref_points[mask][indices].clone()
+                points[:, :3] = (points[:, :3] - Ti[:3, 3]) @ Ti[:3, :3]
+                points_back = box_np_ops.points_to_rbbox_system(points[:, :3], boxes[i:i+1])
+                corners_back = box_np_ops.points_to_rbbox_system(corners[i], boxes[i:i+1])
+                
+                points_synced.append(points_back)
+                #self.vis.boxes(f'box-{token}-frame-{frame_id}', corners_back.reshape(-1, 8, 3), labels[i:i+1])
+            points_synced = np.concatenate(points_synced, axis=0)
+            self.vis.pointcloud(f'token-points', points_synced[:, :3])
+            self.vis.show()
+            import ipdb; ipdb.set_trace()
 
     def solve(self, max_iter=10000):
         """solve the optimization.
@@ -460,7 +472,6 @@ class ARAPGDSolver:
         returns:
             
         """
-        import ipdb; ipdb.set_trace()
         self.solve_dense()
         #q = self.ref_points
         #ref_n = self.ref_normals

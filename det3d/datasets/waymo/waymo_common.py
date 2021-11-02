@@ -305,12 +305,14 @@ def _fill_infos(root_path, frames, split='train', nsweeps=1):
                 gt_boxes[:, -1] = -np.pi / 2 - gt_boxes[:, -1]
                 gt_boxes[:, [3, 4]] = gt_boxes[:, [4, 3]]
 
+            gt_tokens = np.array([ann['name'] for ann in annos])
             gt_names = np.array([TYPE_LIST[ann['label']] for ann in annos])
             mask_not_zero = (num_points_in_gt > 0).reshape(-1)    
 
             # filter boxes without lidar points 
             info['gt_boxes'] = gt_boxes[mask_not_zero, :].astype(np.float32)
             info['gt_names'] = gt_names[mask_not_zero].astype(str)
+            info['gt_tokens'] = gt_tokens[mask_not_zero].astype(str)
 
         infos.append(info)
     return infos

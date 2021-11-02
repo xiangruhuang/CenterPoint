@@ -46,7 +46,6 @@ def convert(idx):
         decoded_frame = waymo_decoder.decode_frame(frame, frame_id)
         bin_filepath = f'/mnt/xrhuang/datasets/waymo/kitti_format/{split}/velodyne/{prefix}{idx:03d}{frame_id:03d}.bin'
         
-        #points = np.fromfile(bin_filepath, dtype=np.float32).reshape(-1, 6)
         decoded_frame.pop('lidars')
         decoded_frame['lidars'] = bin_filepath
         
@@ -57,12 +56,13 @@ def convert(idx):
         with open(os.path.join(ANNO_PATH, 'seq_{}_frame_{}.pkl'.format(idx, frame_id)), 'wb') as f:
             pickle.dump(decoded_annos, f)
 
-
 def main(args):
     global fnames, prefix
     fnames = sorted(list(glob.glob(args.record_path)))
 
     print("Number of files {}".format(len(fnames)))
+    
+    convert(0)
 
     with Pool(128) as p: # change according to your cpu
         r = list(tqdm.tqdm(p.imap(convert, range(len(fnames))), total=len(fnames)))

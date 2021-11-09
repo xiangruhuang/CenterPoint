@@ -8,7 +8,6 @@ setup(
             'src/primitives_cpu.cpp',
             'src/primitives_api.cpp',
             'src/primitives_hash.cpp',
-            'src/primitives_hash.cu',
         ],
         extra_compile_args={'cxx': ['-g', '-I /usr/local/cuda/include'],
                             'nvcc': ['-O2']})

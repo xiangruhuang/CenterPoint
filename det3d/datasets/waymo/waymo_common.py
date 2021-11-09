@@ -111,6 +111,7 @@ def _create_pd_detection(detections, infos, result_path, tracking=False):
 
     print("results saved to {}".format(path))
     f = open(path, 'wb')
+    print('#objects', len(objects.objects))
     f.write(objects.SerializeToString())
     f.close()
 

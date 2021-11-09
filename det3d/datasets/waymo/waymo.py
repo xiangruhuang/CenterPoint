@@ -94,7 +94,6 @@ class WaymoDataset(PointCloudDataset):
 
     def get_sensor_data(self, idx):
         info = self._waymo_infos[idx]
-
         res = {
             "lidar": {
                 "type": "lidar",

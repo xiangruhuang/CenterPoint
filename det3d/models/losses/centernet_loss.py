@@ -54,8 +54,10 @@ class FastFocalLoss(nn.Module):
     return - (pos_loss + neg_loss) / num_pos
 
 class RobustFocalLoss(nn.Module):
-  def __init__(self):
+  def __init__(self, pos_weight=1.0, neg_weight=0.0):
     super(RobustFocalLoss, self).__init__()
+    self.pos_weight = pos_weight
+    self.neg_weight = neg_weight
 
   def forward(self, out, target, ind, mask, cat):
     '''
@@ -77,4 +79,4 @@ class RobustFocalLoss(nn.Module):
     pos_loss = pos_loss.sum()
     if num_pos == 0:
       return - neg_loss
-    return - (pos_loss + neg_loss) / num_pos
+    return - (pos_loss*self.pos_weight + neg_loss*self.neg_weight) / num_pos

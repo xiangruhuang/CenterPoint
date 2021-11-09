@@ -110,7 +110,8 @@ def main():
     model = build_detector(cfg.model, train_cfg=cfg.train_cfg, test_cfg=cfg.test_cfg)
 
     datasets = [build_dataset(cfg.data.train)]
-    #print(datasets[0][0])
+    #for i in range(203, 600):
+    #    d = datasets[0][np.random.randint(0, 150000)]
     torch.autograd.set_detect_anomaly(True)
 
     if len(cfg.workflow) == 2:

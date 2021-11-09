@@ -218,13 +218,17 @@ class LoadMotionMasks(object):
                         object_points = valid_points[motion_dict['obj_idx']]
                         moving_points = valid_points[motion_dict['moving']]
                         moving_clusters = motion_dict['point2cluster'][motion_dict['moving']]
-                        centers = scatter(
-                                    torch.from_numpy(moving_points),
-                                    torch.from_numpy(moving_clusters).long(),
-                                    dim=0, dim_size=moving_clusters.max()+1,
-                                    reduce='mean')
-                        res['lidar']['moving_points'] = centers[np.unique(moving_clusters)]
-                        res['lidar']['using_motion_mask'] = np.array(True).astype(np.bool).reshape(1)
+                        if moving_points.shape[0] > 0 and moving_clusters.shape[0] > 0:
+                            centers = scatter(
+                                        torch.from_numpy(moving_points),
+                                        torch.from_numpy(moving_clusters).long(),
+                                        dim=0, dim_size=moving_clusters.max()+1,
+                                        reduce='mean')
+                            res['lidar']['using_motion_mask'] = np.array(True).astype(np.bool).reshape(1)
+                            moving_points = centers[np.unique(moving_clusters)].numpy()
+                        else:
+                            res['lidar']['using_motion_mask'] = np.array(False).astype(np.bool).reshape(1)
+                            moving_points = np.zeros(shape=(0, 3), dtype=np.float32)
                     except Exception as e:
                         print(f'error loading {pth_file}')
                         print(e)

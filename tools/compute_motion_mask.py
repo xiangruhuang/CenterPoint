@@ -61,11 +61,6 @@ def parse_args():
 
 def main():
 
-    # torch.manual_seed(0)
-    # torch.backends.cudnn.deterministic = True
-    # torch.backends.cudnn.benchmark = False
-    # np.random.seed(0)
-
     args = parse_args()
 
     cfg = Config.fromfile(args.config)
@@ -95,46 +90,9 @@ def main():
     logger.info("Distributed training: {}".format(distributed))
     logger.info(f"torch.backends.cudnn.benchmark: {torch.backends.cudnn.benchmark}")
 
-    if args.local_rank == 0:
-        # copy important files to backup
-        backup_dir = os.path.join(cfg.work_dir, "det3d")
-        os.makedirs(backup_dir, exist_ok=True)
-        # os.system("cp -r * %s/" % backup_dir)
-        # logger.info(f"Backup source files to {cfg.work_dir}/det3d")
-
-    # set random seeds
-    if args.seed is not None:
-        logger.info("Set random seed to {}".format(args.seed))
-        set_random_seed(args.seed)
-
-    model = build_detector(cfg.model, train_cfg=cfg.train_cfg, test_cfg=cfg.test_cfg)
-
-    datasets = [build_dataset(cfg.data.train)]
-    print(datasets[0][0])
-
-    torch.autograd.set_detect_anomaly(True)
-
-    if len(cfg.workflow) == 2:
-        datasets.append(build_dataset(cfg.data.val))
-
-    if cfg.checkpoint_config is not None:
-        # save det3d version, config file content and class names in
-        # checkpoints as meta data
-        cfg.checkpoint_config.meta = dict(
-            config=cfg.text, CLASSES=datasets[0].CLASSES
-        )
-
-    # add an attribute for visualization convenience
-    model.CLASSES = datasets[0].CLASSES
-    train_detector(
-        model,
-        datasets,
-        cfg,
-        distributed=distributed,
-        validate=args.validate,
-        logger=logger,
-    )
-
+    dataset = build_dataset(cfg.data.train)
+    for data in dataset:
+        data
 
 if __name__ == "__main__":
     main()

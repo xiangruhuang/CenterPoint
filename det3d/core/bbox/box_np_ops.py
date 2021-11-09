@@ -261,6 +261,13 @@ def center_to_corner_box3d(centers, dims, angles=None, origin=(0.5, 0.5, 0.5), a
     corners += centers.reshape([-1, 1, 3])
     return corners
 
+def points_to_rbbox_system(points, box, origin=(0.5, 0.5, 0.5), axis=2):
+    centers = box[:, :3]
+    angles = box[:, -1]
+    points = points - centers.reshape([-1, 3])
+    if angles is not None:
+        points = rotation_3d_in_axis(points.reshape(-1, 1, 3), -angles, axis=axis)
+    return points.reshape(-1, 3)
 
 def center_to_corner_box2d(centers, dims, angles=None, origin=0.5):
     """convert kitti locations, dimensions and angles to corners.

@@ -46,7 +46,6 @@ def decode_annos(frame, frame_id):
   """Decodes some meta data (e.g. calibration matrices, frame matrices)."""
 
   veh_to_global = np.array(frame.pose.transform)
-
   ref_pose = np.reshape(np.array(frame.pose.transform), [4, 4])
   global_from_ref_rotation = ref_pose[:3, :3] 
   objects = extract_objects(frame.laser_labels, global_from_ref_rotation)

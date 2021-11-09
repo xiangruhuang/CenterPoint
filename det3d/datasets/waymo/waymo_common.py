@@ -214,19 +214,20 @@ def _fill_infos(root_path, frames, split='train', nsweeps=1):
         frame_id = int(frame_name.split("_")[3][:-4]) # remove .pkl
 
         prev_id = frame_id
-        sweeps = [] 
+        sweeps = []
         while len(sweeps) < nsweeps - 1:
             if prev_id <= 0:
-                if len(sweeps) == 0:
-                    sweep = {
-                        "path": lidar_path,
-                        "token": frame_name,
-                        "transform_matrix": None,
-                        "time_lag": 0
-                    }
-                    sweeps.append(sweep)
-                else:
-                    sweeps.append(sweeps[-1])
+                break
+                #if len(sweeps) == 0:
+                #    sweep = {
+                #        "path": lidar_path,
+                #        "token": frame_name,
+                #        "transform_matrix": None,
+                #        "time_lag": 0
+                #    }
+                #    sweeps.append(sweep)
+                #else:
+                #    sweeps.append(sweeps[-1])
             else:
                 prev_id = prev_id - 1
                 # global identifier  
@@ -234,6 +235,8 @@ def _fill_infos(root_path, frames, split='train', nsweeps=1):
                 curr_name = 'seq_{}_frame_{}.pkl'.format(sequence_id, prev_id)
                 curr_lidar_path = os.path.join(root_path, split, 'lidar', curr_name)
                 curr_label_path = os.path.join(root_path, split, 'annos', curr_name)
+                if not os.path.exists(curr_lidar_path):
+                    break
                 
                 curr_obj = get_obj(curr_label_path)
                 curr_pose = np.reshape(curr_obj['veh_to_global'], [4, 4])
@@ -255,6 +258,39 @@ def _fill_infos(root_path, frames, split='train', nsweeps=1):
                 sweeps.append(sweep)
 
         info["sweeps"] = sweeps
+        
+        prev_id = frame_id
+        reverse_sweeps = []
+        while len(reverse_sweeps) < nsweeps - 1:
+            prev_id = prev_id + 1
+            # global identifier  
+
+            curr_name = 'seq_{}_frame_{}.pkl'.format(sequence_id, prev_id)
+            curr_lidar_path = os.path.join(root_path, split, 'lidar', curr_name)
+            curr_label_path = os.path.join(root_path, split, 'annos', curr_name)
+            if not os.path.exists(curr_lidar_path):
+                break
+            
+            curr_obj = get_obj(curr_label_path)
+            curr_pose = np.reshape(curr_obj['veh_to_global'], [4, 4])
+            global_from_car, _ = veh_pos_to_transform(curr_pose) 
+            
+            tm = reduce(
+                np.dot,
+                [ref_from_global, global_from_car],
+            )
+
+            curr_time = int(curr_obj['frame_name'].split("_")[-1])
+            time_lag = ref_time - 1e-6 * curr_time
+
+            reverse_sweep = {
+                "path": curr_lidar_path,
+                "transform_matrix": tm,
+                "time_lag": time_lag,
+            }
+            reverse_sweeps.append(reverse_sweep)
+
+        info["reverse_sweeps"] = reverse_sweeps
 
         if split != 'test':
             # read boxes 
@@ -270,12 +306,14 @@ def _fill_infos(root_path, frames, split='train', nsweeps=1):
                 gt_boxes[:, -1] = -np.pi / 2 - gt_boxes[:, -1]
                 gt_boxes[:, [3, 4]] = gt_boxes[:, [4, 3]]
 
+            gt_tokens = np.array([ann['name'] for ann in annos])
             gt_names = np.array([TYPE_LIST[ann['label']] for ann in annos])
             mask_not_zero = (num_points_in_gt > 0).reshape(-1)    
 
             # filter boxes without lidar points 
             info['gt_boxes'] = gt_boxes[mask_not_zero, :].astype(np.float32)
             info['gt_names'] = gt_names[mask_not_zero].astype(str)
+            info['gt_tokens'] = gt_tokens[mask_not_zero].astype(str)
 
         infos.append(info)
     return infos
@@ -319,6 +357,25 @@ def create_waymo_infos(root_path, split='train', nsweeps=1):
         os.path.join(root_path, "infos_"+split+"_{:02d}sweeps_filter_zero_gt.pkl".format(nsweeps)), "wb"
     ) as f:
         pickle.dump(waymo_infos, f)
+
+def create_waymo_sequence_infos(root_path, split='train'):
+    frames = get_available_frames(root_path, split)
+    start_frames = []
+    for f in frames:
+        frame_id = int(f.split('.')[0].split('_')[-1])
+        if frame_id == 0:
+            start_frames.append(f)
+
+    waymo_infos = _fill_infos(
+        root_path, start_frames, split, nsweeps=10000
+    )
+    print(
+        f"sequences: {len(waymo_infos)}"
+    )
+    with open(
+        os.path.join(root_path, "infos_"+split+"_sequences_filter_zero_gt.pkl"), "wb"
+    ) as fout:
+        pickle.dump(waymo_infos, fout)
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Waymo 3D Extractor")

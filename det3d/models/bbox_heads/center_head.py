@@ -263,34 +263,37 @@ class CenterHead(nn.Module):
         if mmask.any():
             max_hm = max_hm[mmask]
             motion_hm = motion_hm[mmask]
+
         # compute motion mask heatmap loss
         max_hm = max_hm.view(-1, 1, max_hm.shape[2], max_hm.shape[3])
         motion_hm = motion_hm.view(-1, 1, motion_hm.shape[2], motion_hm.shape[3])
-        masks, cats, peaks = [], [], []
+        masks, poss, cats = [], [], []
         max_num_peaks = 0
         for i in range(motion_hm.shape[0]):
-            px, py = torch.where(motion_hm[i, 0] > 0.5)
-            peak = px * motion_hm.shape[3] + py
-            if peak.shape[0] > max_num_peaks:
-                max_num_peaks = peak.shape[0]
-            peaks.append(peak)
+            px, py = torch.where(motion_hm[i, 0] > 0.8)
+            pos = px * motion_hm.shape[3] + py
+            if pos.shape[0] > max_num_peaks:
+                max_num_peaks = pos.shape[0]
+            poss.append(pos)
 
         for i in range(motion_hm.shape[0]):
-            peak = torch.zeros(max_num_peaks).long().to(peaks[i].device)
-            mask = torch.zeros(max_num_peaks).long().to(peaks[i].device)
-            cat = torch.zeros(max_num_peaks).long().to(peaks[i].device)
-            num_peak = peaks[i].shape[0]
-            peak[:num_peak] = peaks[i]
+            peak = torch.zeros(max_num_peaks).long().to(poss[i].device)
+            mask = torch.zeros(max_num_peaks).long().to(poss[i].device)
+            cat = torch.zeros(max_num_peaks).long().to(poss[i].device)
+            num_peak = poss[i].shape[0]
+            if num_peak > max_num_peaks:
+                num_peak = max_num_peaks
+                poss[i] = poss[i][:num_peak]
+            peak[:num_peak] = poss[i]
             mask[:num_peak] = 1
-            peaks[i] = peak
+            poss[i] = peak
             cats.append(cat)
             masks.append(mask)
         mask = torch.stack(masks, dim=0).to(max_hm.device)
         cat = torch.stack(cats, dim=0).to(max_hm.device)
-        peak = torch.stack(peaks, dim=0).to(max_hm.device)
+        pos = torch.stack(poss, dim=0).to(max_hm.device)
         motion_hm_loss = self.rcrit(
-            max_hm, motion_hm.to(max_hm.device),
-            peak, mask, cat
+            max_hm, motion_hm.to(max_hm.device), pos, mask, cat
         )
         if not mmask.any():
             motion_hm_loss = motion_hm_loss * 0
@@ -305,28 +308,31 @@ class CenterHead(nn.Module):
                 for key in ['ind', 'cat', 'mask', 'hm', 'anno_box']:
                     example[key][task_id] = example[key][task_id][mmask]
             
-            #if True:
-            #    batch_size = mmask.shape[0]
-            #    from det3d.core.utils.visualization import Visualizer
-            #    vis = Visualizer([0.1, 0.1, 0.15], [-75.2, -75.2])
-            #    points = example['points']
-            #    for i in range(batch_size):
-            #        vis.clear()
-            #        hms = []
-            #        for j in range(preds_dict['hm'].shape[1]):
-            #            hms.append(preds_dict['hm'][i, j].detach().cpu())
-            #        for j, hm in enumerate(hms):
-            #            vis.heatmap(f'hm-{j}', hm)
-            #            vis.heatmap(f'GT-hm-{j}', example['hm'][0][i, j].detach().cpu())
-            #        gt_box = example['gt_boxes_and_cls'][i, :, :-1]
-            #        gt_box = gt_box[example['mask'][task_id][i]]
-            #        vis.pointcloud('points', points[points[:, 0] == i, 1:4].detach().cpu())
-            #        from det3d.core.bbox import box_np_ops
-            #        gt_box = gt_box.detach().cpu().numpy()
-            #        corners = box_np_ops.center_to_corner_box3d(
-            #            gt_box[:, :3], gt_box[:, 3:6], gt_box[:, 6], axis=2)
-            #        vis.boxes('boxes', corners)
-            #        vis.show()
+            if False:
+                batch_size = mmask.shape[0]
+                from det3d.core.utils.visualization import Visualizer
+                vis = Visualizer([0.1, 0.1, 0.15], [-75.2, -75.2])
+                points = example['points']
+                for i in range(batch_size):
+                    vis.clear()
+                    hms = []
+                    for j in range(preds_dict['hm'].shape[1]):
+                        hms.append(preds_dict['hm'][i, j].detach().cpu())
+                    for j, hm in enumerate(hms):
+                        vis.heatmap(f'hm-{j}', hm, enabled=False)
+                        vis.heatmap(f'GT-hm-{j}', example['hm'][0][i, j].detach().cpu(), enabled=False)
+                    vis.heatmap(f'motion-hm', motion_hm[i, 0].detach().cpu())
+                    vis.heatmap(f'max-hm', max_hm[i, 0].detach().cpu())
+                    gt_box = example['gt_boxes_and_cls'][i, :, :-1]
+                    gt_box = gt_box[example['mask'][task_id][i]]
+                    vis.pointcloud('points', points[points[:, 0] == i, 1:4].detach().cpu())
+                    from det3d.core.bbox import box_np_ops
+                    gt_box = gt_box.detach().cpu().numpy()
+                    corners = box_np_ops.center_to_corner_box3d(
+                        gt_box[:, :3], gt_box[:, 3:6], gt_box[:, 6], axis=2)
+                    vis.boxes('GT boxes', corners)
+                    import ipdb; ipdb.set_trace()
+                    vis.show()
 
             # heatmap focal loss
             # preds_dict['hm'] = self._sigmoid(preds_dict['hm'])
@@ -525,6 +531,21 @@ class CenterHead(nn.Module):
                     ret[k] = torch.cat([ret[i][k] for ret in rets])
 
             ret['metadata'] = metas[0][i]
+            if True:
+                import ipdb; ipdb.set_trace()
+                from det3d.core.utils.visualization import Visualizer
+                from det3d.core.bbox import box_np_ops
+                vis = Visualizer([0.1, 0.1, 0.15], [-75.2, -75.2])
+                box = ret['box3d_lidar'].detach().cpu().numpy()
+                corners = box_np_ops.center_to_corner_box3d(
+                    box[:, :3], box[:, 3:6], box[:, 6], axis=2)
+                scores = ret['scores'].detach().cpu().numpy()
+                labels = ret['label_preds'].detach().cpu().numpy()
+                vis.boxes('box-all', corners, labels=labels)
+                vis.boxes('box > 0.2', corners[scores > 0.2], labels=labels[scores > 0.2])
+                points = example['points'].detach().cpu()
+                vis.pointcloud('points', points[points[:, 0] == i, 1:4])
+                vis.show()
             ret_list.append(ret)
 
         return ret_list 

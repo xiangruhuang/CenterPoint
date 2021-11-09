@@ -12,7 +12,7 @@ class TemporalVoxelization(object):
     """Group points in all frame in spatio-temporal (4D) voxels
 
     Args:
-        frames
+        res['frames']: frames
         voxel_size (torch.tensor, shape=[4]): spatio-temporal voxel size
 
     Returns:
@@ -21,29 +21,38 @@ class TemporalVoxelization(object):
         voxels (V, 4): (x,y,z,t) 4D voxels
         vp_edges (2, E): (voxel, point) edges
     """
-    def __init__(self, voxel_size, visualize=False):
+    def __init__(self, voxel_size, debug=False):
         self.voxel_size = voxel_size
-        self.visualize=visualize
+        self.debug=debug
     
     def __call__(self, res, info):
+        import time
+        start_time = time.time()
         seq = res['lidar_sequence']
         frames = seq.frames
-        voxel_size = self.voxel_size
+        voxel_size = torch.tensor(self.voxel_size, dtype=torch.float32)
         points, normals = seq.points4d(), seq.normals()
-        res['points'] = torch.tensor(points, dtype=torch.float32)
-        res['normals'] = torch.tensor(normals, dtype=torch.float32)
+        points = torch.tensor(points, dtype=torch.float32)
+        normals = torch.tensor(normals, dtype=torch.float32)
+        res['points'] = points
+        res['normals'] = normals 
         
-        res['vp_edges'] = voxelization(points, voxel_size, False)[0].T.long()
+        vp_edges = voxelization(points, voxel_size, False)[0].T.long()
         num_voxels = vp_edges[0].max() + 1
+        res['vp_edges'] = vp_edges
         res['voxels'] = scatter(points[vp_edges[1]], vp_edges[0],
                                 reduce='mean', dim=0, dim_size=num_voxels)
-        if self.visualize:
+        end_time = time.time()
+        if self.debug:
             from det3d.core.utils.visualization import Visualizer
             vis = Visualizer([], [])
             ps_p = vis.pointcloud('points', res['points'][:, :3])
-            ps_p.add_scalar_quantity('frame % 2', res['points'][:, -1].numpy() % 2)
+            ps_p.add_scalar_quantity('frame % 2', 
+                res['points'][:, -1].numpy() % 2)
             ps_v = vis.pointcloud('voxels', res['voxels'][:, :3])
-            ps_v.add_scalar_quantity('frame % 2', res['voxels'][:, -1].numpy() % 2)
+            ps_v.add_scalar_quantity('frame % 2',
+                res['voxels'][:, -1].numpy() % 2)
+            print(f'temporal voxelization: time={end_time-start_time:.4f}')
             vis.show()
 
         return res, info

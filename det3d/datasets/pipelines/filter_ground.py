@@ -12,11 +12,13 @@ from det3d.ops.primitives.primitives_cpu import (
 
 @PIPELINES.register_module
 class FilterGround(object):
-    def __init__(self, rel_threshold=0.5, visualize=False):
+    def __init__(self, rel_threshold=0.5, lamb=10, debug=False):
         self.rel_threshold = rel_threshold
-        self.visualize = visualize
+        self.debug = debug
+        self.lamb = lamb
+        self.voxel_size=[1,1]
 
-    def voxelize(self, points, voxel_size=[1, 1]):
+    def voxelize(self, points):
         """ voxelize the points
 
         Args:
@@ -30,7 +32,7 @@ class FilterGround(object):
         pc_range = torch.tensor(
             [points[:, 0].min(), points[:, 1].min(), 
              points[:, 0].max(), points[:, 1].max()])
-        voxel_size = torch.tensor(voxel_size)
+        voxel_size = torch.tensor(self.voxel_size)
         grid_size = ((pc_range[2:] - pc_range[:2]) // voxel_size).long()
         x_coord = ((x - pc_range[0]) // voxel_size[0]).long()
         y_coord = ((y - pc_range[1]) // voxel_size[1]).long()
@@ -118,6 +120,7 @@ class FilterGround(object):
         filename = f'data/Waymo/train/ssl/ground_{self.seq_id}.pt'
         if not os.path.exists(filename):
             _points_all = np.concatenate(sweep_points, axis=0)
+
             from torch_cluster import grid_cluster
             points_all = torch.tensor(_points_all)
             
@@ -132,17 +135,17 @@ class FilterGround(object):
             coors = torch.stack([unique_x, unique_y], axis=-1)
             
             # distribute heights into voxels, find minimum per grid
-            grid_heights = scatter(points_all[:, 2], coord_1d, dim=0,
-                                     dim_size=num_grids, reduce='min')
+            grid_heights = scatter(points_all[:, 2],
+                                   coord_1d, dim=0,
+                                   dim_size=num_grids, reduce='min')
 
             # solve an optimization for ground height everywhere
             w = np.zeros(num_grids)
             w[coord_1d] = 1.0
-            ground_heights = self.solve(grid_size, grid_heights, w, lamb=10)
+            ground_heights = self.solve(grid_size, grid_heights, w, lamb=self.lamb)
             ground_heights = ground_heights.reshape(grid_size[1], grid_size[0]).T
             
             valid_masks = []
-            filtered_points = []
             num_points = [s.shape[0] for s in sweep_points]
             for i, s in enumerate(sweep_points):
                 x, y, z = torch.tensor(s).T
@@ -156,38 +159,52 @@ class FilterGround(object):
                 
                 rel_height = z - ground_heights[(coord_2d[:, 0], coord_2d[:, 1])]
                 valid_mask = torch.where(rel_height > rel_threshold)[0]
-                #filtered_points.append(s[valid_mask])
-                #valid_masks.append(valid_mask)
+                valid_masks.append(valid_mask)
                 seq.frames[i].filter(valid_mask)
 
-            save_dict = dict(masks=valid_masks, num_points=num_points)
+            save_dict = dict(masks=valid_masks, num_points=num_points,
+                             ground=ground_heights, pc_range=pc_range,
+                             voxel_size=voxel_size)
             torch.save(save_dict, filename)
         else:
             print('loading ground filtering masks')
             load_dict = torch.load(filename)
             valid_masks = load_dict['masks']
             num_points = load_dict['num_points']
+            ground_heights = load_dict['ground']
+            pc_range = load_dict['pc_range']
+            voxel_size = load_dict['voxel_size']
             filtered_points = []
             for i, s in enumerate(sweep_points):
                 assert s.shape[0] == num_points[i]
                 seq.frames[i].filter(valid_masks[i])
 
+        return ground_heights, pc_range, voxel_size 
+
     def __call__(self, res, info):
+        import time
+        start_time = time.time()
         seq = res['lidar_sequence']
         self.seq_id = seq.seq_id
-        if self.visualize:
+        if self.debug:
             from det3d.core.utils.visualization import Visualizer
-            vis = Visualizer([], [])
             p0 = seq.points4d()
+
+        ground_heights, pc_range, voxel_size = \
+                self.filter_ground(seq,
+                                   rel_threshold=self.rel_threshold)
+        res['lidar_sequence'] = seq
+        end_time = time.time()
+        if self.debug:
+            vis = Visualizer(voxel_size, pc_range, size_factor=1)
             ps_p = vis.pointcloud('original points', p0[:, :3])
             ps_p.add_scalar_quantity('frame % 2', p0[:, -1] % 2)
-
-        self.filter_ground(seq, rel_threshold=self.rel_threshold)
-        res['lidar_sequence'] = seq
-        if self.visualize:
             p1 = seq.points4d()
             ps_p = vis.pointcloud('points', p1[:, :3])
+            import ipdb; ipdb.set_trace()
+            ps_g = vis.heatmap('ground', ground_heights.T)
             ps_p.add_scalar_quantity('frame % 2', p1[:, -1] % 2)
+            print(f'filter ground: time={end_time-start_time:.4f}')
             vis.show()
 
         return res, info

@@ -9,6 +9,9 @@ from .motion_masks import EstimateMotionMask
 from .seq_loading import LoadLiDARSequence
 from .filter_ground import FilterGround
 from .temporal_voxelization import TemporalVoxelization
+from .find_components import FindConnectedComponents
+from .filter_isolated import FilterIsolatedPoints
+from .find_moving_boxes import FindMovingBoxes
 
 __all__ = [
     "Compose",
@@ -30,4 +33,7 @@ __all__ = [
     "LoadLiDARSequence",
     "FilterGround",
     "TemporalVoxelization",
+    "FindConnectedComponents",
+    "FilterIsolatedPoints",
+    "FindMovingBoxes",
 ]

@@ -97,7 +97,7 @@ class Visualizer:
         coors = torch.stack([*indices, heights], dim=-1)
         ps_p = ps.register_point_cloud(name, coors, radius=radius, **kwargs)
         if color:
-            ps_p.add_scalar_quantity("height", (coors[:, -1]+1e-6).log(), enabled=True) 
+            ps_p.add_scalar_quantity("height", (coors[:, -1]), enabled=True) 
 
         return ps_p
 

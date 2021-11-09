@@ -11,7 +11,6 @@ import time
 from PytorchHashmap.torch_hash import HashTable
 from .geometry_utils import *
 from collections import defaultdict
-from .utils import find_graphs
 
 class ARAPGDSolver:
     def __init__(self,

@@ -297,3 +297,21 @@ class LoadPointCloudAnnotations(object):
             pass 
 
         return res, info
+
+@PIPELINES.register_module
+class LoadMotionAnnotations(object):
+    def __init__(self, with_bbox=True, **kwargs):
+        pass
+
+    def __call__(self, res, info):
+
+        if res["type"] == 'WaymoDataset':
+            res["lidar"]["annotations"] = {
+                "boxes": info["gt_boxes"].astype(np.float32),
+                "tokens": info["gt_tokens"],
+                "names": info["gt_names"],
+            }
+        else:
+            pass 
+
+        return res, info

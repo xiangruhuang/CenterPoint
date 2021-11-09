@@ -44,9 +44,15 @@ class Frame:
     def load_annos(self):
         anno_dict = get_pickle(self.path.replace('lidar', 'annos'))
         self.T = anno_dict['veh_to_global'].reshape(4, 4)
+        self.frame_name = anno_dict['frame_name']
+        self.scene_name = anno_dict['scene_name']
         cls_map = {'VEHICLE':0, 'PEDESTRIAN':1, 'CYCLIST':2}
         label_map = {0:-1, 1:0, 2:1, 3:-1, 4:2}
         self.boxes = np.stack([o['box'] for o in anno_dict['objects']], axis=0)
+        self.global_speed = np.array([o['global_speed']
+                                     for o in anno_dict['objects']])
+        self.global_accel = np.array([o['global_accel']
+                                     for o in anno_dict['objects']])
         self.boxes[:, -1] *= -1
         self.tokens = np.array([o['name'] for o in anno_dict['objects']]
                                ).astype(str)
@@ -64,7 +70,7 @@ class Frame:
     def toglobal(self):
         T = self.T @ np.linalg.inv(self.pose)
         self.transform(T)
-    
+
     def tolocal(self):
         T = np.linalg.inv(self.pose)
         self.transform(T)

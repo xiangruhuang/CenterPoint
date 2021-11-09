@@ -4,7 +4,7 @@ from torch.utils.cpp_extension import BuildExtension, CppExtension
 setup(
     name='primitives',
     ext_modules=[
-        CppExtension('primitives_cuda', [
+        CppExtension('primitives_cpu', [
             'src/primitives_cpu.cpp',
             'src/primitives_api.cpp',
             'src/primitives_hash.cpp',

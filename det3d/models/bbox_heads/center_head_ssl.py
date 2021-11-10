@@ -1,10 +1,3 @@
-# ------------------------------------------------------------------------------
-# Portions of this code are from
-# det3d (https://github.com/poodarchu/Det3D/tree/56402d4761a5b73acd23080f537599b0888cce07)
-# Copyright (c) 2019 朱本金
-# Licensed under the MIT License
-# ------------------------------------------------------------------------------
-
 import logging
 from collections import defaultdict
 from det3d.core import box_torch_ops
@@ -21,151 +14,8 @@ except:
     print("Deformable Convolution not built!")
 
 from det3d.core.utils.circle_nms_jit import circle_nms
-
-class FeatureAdaption(nn.Module):
-    """Feature Adaption Module.
-
-    Feature Adaption Module is implemented based on DCN v1.
-    It uses anchor shape prediction rather than feature map to
-    predict offsets of deformable conv layer.
-
-    Args:
-        in_channels (int): Number of channels in the input feature map.
-        out_channels (int): Number of channels in the output feature map.
-        kernel_size (int): Deformable conv kernel size.
-        deformable_groups (int): Deformable conv group size.
-    """
-
-    def __init__(self,
-                 in_channels,
-                 out_channels,
-                 kernel_size=3,
-                 deformable_groups=4):
-        super(FeatureAdaption, self).__init__()
-        offset_channels = kernel_size * kernel_size * 2
-        self.conv_offset = nn.Conv2d(
-            in_channels, deformable_groups * offset_channels, 1, bias=True)
-        self.conv_adaption = DeformConv(
-            in_channels,
-            out_channels,
-            kernel_size=kernel_size,
-            padding=(kernel_size - 1) // 2,
-            deformable_groups=deformable_groups)
-        self.relu = nn.ReLU(inplace=True)
-        self.init_offset()
-
-    def init_offset(self):
-        self.conv_offset.weight.data.zero_()
-
-    def forward(self, x,):
-        offset = self.conv_offset(x)
-        x = self.relu(self.conv_adaption(x, offset))
-        return x
-
-class SepHead(nn.Module):
-    def __init__(
-        self,
-        in_channels,
-        heads,
-        head_conv=64,
-        final_kernel=1,
-        bn=False,
-        init_bias=-2.19,
-        **kwargs,
-    ):
-        super(SepHead, self).__init__(**kwargs)
-
-        self.heads = heads 
-        for head in self.heads:
-            classes, num_conv = self.heads[head]
-
-            fc = Sequential()
-            for i in range(num_conv-1):
-                fc.add(nn.Conv2d(in_channels, head_conv,
-                    kernel_size=final_kernel, stride=1, 
-                    padding=final_kernel // 2, bias=True))
-                if bn:
-                    fc.add(nn.BatchNorm2d(head_conv))
-                fc.add(nn.ReLU())
-
-            fc.add(nn.Conv2d(head_conv, classes,
-                    kernel_size=final_kernel, stride=1, 
-                    padding=final_kernel // 2, bias=True))    
-
-            if 'hm' in head:
-                fc[-1].bias.data.fill_(init_bias)
-            else:
-                for m in fc.modules():
-                    if isinstance(m, nn.Conv2d):
-                        kaiming_init(m)
-
-            self.__setattr__(head, fc)
-        
-
-    def forward(self, x):
-        ret_dict = dict()        
-        for head in self.heads:
-            ret_dict[head] = self.__getattr__(head)(x)
-
-        return ret_dict
-
-class DCNSepHead(nn.Module):
-    def __init__(
-        self,
-        in_channels,
-        num_cls,
-        heads,
-        head_conv=64,
-        final_kernel=1,
-        bn=False,
-        init_bias=-2.19,
-        **kwargs,
-    ):
-        super(DCNSepHead, self).__init__(**kwargs)
-
-        # feature adaptation with dcn
-        # use separate features for classification / regression
-        self.feature_adapt_cls = FeatureAdaption(
-            in_channels,
-            in_channels,
-            kernel_size=3,
-            deformable_groups=4) 
-        
-        self.feature_adapt_reg = FeatureAdaption(
-            in_channels,
-            in_channels,
-            kernel_size=3,
-            deformable_groups=4)  
-
-        # heatmap prediction head 
-        self.cls_head = Sequential(
-            nn.Conv2d(in_channels, head_conv,
-            kernel_size=3, padding=1, bias=True),
-            nn.BatchNorm2d(64),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(head_conv, num_cls,
-                kernel_size=3, stride=1, 
-                padding=1, bias=True)
-        )
-        self.cls_head[-1].bias.data.fill_(init_bias)
-
-        # other regression target 
-        self.task_head = SepHead(in_channels, heads, head_conv=head_conv, bn=bn, final_kernel=final_kernel)
-
-
-    def forward(self, x):    
-        center_feat = self.feature_adapt_cls(x)
-        reg_feat = self.feature_adapt_reg(x)
-
-        cls_score = self.cls_head(center_feat)
-        ret = self.task_head(reg_feat)
-        ret['hm'] = cls_score
-
-        return ret
-
-
 @HEADS.register_module
-class CenterHead(nn.Module):
+class CenterHeadSSL(nn.Module):
     def __init__(
         self,
         in_channels=[128,],
@@ -181,7 +31,7 @@ class CenterHead(nn.Module):
         num_hm_conv=2,
         dcn_head=False,
     ):
-        super(CenterHead, self).__init__()
+        super(CenterHeadSSL, self).__init__()
 
         num_classes = [len(t["class_names"]) for t in tasks]
         self.class_names = [t["class_names"] for t in tasks]
@@ -252,9 +102,90 @@ class CenterHead(nn.Module):
 
     def loss(self, example, preds_dicts, **kwargs):
         rets = []
+        mmask = example['using_motion_mask']
+        ret = {}
+        for i in range(len(preds_dicts)):
+            preds_dicts[i]['hm'] = self._sigmoid(preds_dicts[i]['hm'])
+
+        # try to filter with mmask
+        max_hm = preds_dicts[0]['hm'].max(1)[0].unsqueeze(1)
+        motion_hm = example['motion_hm'].unsqueeze(1)
+        if mmask.any():
+            max_hm = max_hm[mmask]
+            motion_hm = motion_hm[mmask]
+
+        # compute motion mask heatmap loss
+        max_hm = max_hm.view(-1, 1, max_hm.shape[2], max_hm.shape[3])
+        motion_hm = motion_hm.view(-1, 1, motion_hm.shape[2], motion_hm.shape[3])
+        masks, poss, cats = [], [], []
+        max_num_peaks = 0
+        for i in range(motion_hm.shape[0]):
+            px, py = torch.where(motion_hm[i, 0] > 0.8)
+            pos = px * motion_hm.shape[3] + py
+            if pos.shape[0] > max_num_peaks:
+                max_num_peaks = pos.shape[0]
+            poss.append(pos)
+
+        for i in range(motion_hm.shape[0]):
+            peak = torch.zeros(max_num_peaks).long().to(poss[i].device)
+            mask = torch.zeros(max_num_peaks).long().to(poss[i].device)
+            cat = torch.zeros(max_num_peaks).long().to(poss[i].device)
+            num_peak = poss[i].shape[0]
+            if num_peak > max_num_peaks:
+                num_peak = max_num_peaks
+                poss[i] = poss[i][:num_peak]
+            peak[:num_peak] = poss[i]
+            mask[:num_peak] = 1
+            poss[i] = peak
+            cats.append(cat)
+            masks.append(mask)
+        mask = torch.stack(masks, dim=0).to(max_hm.device)
+        cat = torch.stack(cats, dim=0).to(max_hm.device)
+        pos = torch.stack(poss, dim=0).to(max_hm.device)
+        motion_hm_loss = self.rcrit(
+            max_hm, motion_hm.to(max_hm.device), pos, mask, cat
+        )
+        if not mmask.any():
+            motion_hm_loss = motion_hm_loss * 0
+        loss = self.motion_weight * motion_hm_loss
+        ret = {'loss': loss, 'motion_hm_loss': motion_hm_loss.detach().cpu()}
+
+        mmask = (mmask == False)
         for task_id, preds_dict in enumerate(preds_dicts):
+            if mmask.any():
+                for key in preds_dict.keys():
+                    preds_dict[key] = preds_dict[key][mmask]
+                for key in ['ind', 'cat', 'mask', 'hm', 'anno_box']:
+                    example[key][task_id] = example[key][task_id][mmask]
+            
+            if False:
+                batch_size = mmask.shape[0]
+                from det3d.core.utils.visualization import Visualizer
+                vis = Visualizer([0.1, 0.1, 0.15], [-75.2, -75.2])
+                points = example['points']
+                for i in range(batch_size):
+                    vis.clear()
+                    hms = []
+                    for j in range(preds_dict['hm'].shape[1]):
+                        hms.append(preds_dict['hm'][i, j].detach().cpu())
+                    for j, hm in enumerate(hms):
+                        vis.heatmap(f'hm-{j}', hm, enabled=False)
+                        vis.heatmap(f'GT-hm-{j}', example['hm'][0][i, j].detach().cpu(), enabled=False)
+                    vis.heatmap(f'motion-hm', motion_hm[i, 0].detach().cpu())
+                    vis.heatmap(f'max-hm', max_hm[i, 0].detach().cpu())
+                    gt_box = example['gt_boxes_and_cls'][i, :, :-1]
+                    gt_box = gt_box[example['mask'][task_id][i]]
+                    vis.pointcloud('points', points[points[:, 0] == i, 1:4].detach().cpu())
+                    from det3d.core.bbox import box_np_ops
+                    gt_box = gt_box.detach().cpu().numpy()
+                    corners = box_np_ops.center_to_corner_box3d(
+                        gt_box[:, :3], gt_box[:, 3:6], gt_box[:, 6], axis=2)
+                    vis.boxes('GT boxes', corners)
+                    import ipdb; ipdb.set_trace()
+                    vis.show()
+
             # heatmap focal loss
-            preds_dict['hm'] = self._sigmoid(preds_dict['hm'])
+            # preds_dict['hm'] = self._sigmoid(preds_dict['hm'])
             
             hm_loss = self.crit(preds_dict['hm'], example['hm'][task_id], example['ind'][task_id], example['mask'][task_id], example['cat'][task_id])
 
@@ -270,20 +201,25 @@ class CenterHead(nn.Module):
                     target_box = target_box[..., [0, 1, 2, 3, 4, 5, -2, -1]] # remove vel target                       
             else:
                 raise NotImplementedError()
-
-            ret = {}
  
             # Regression loss for dimension, offset, height, rotation            
             box_loss = self.crit_reg(preds_dict['anno_box'], example['mask'][task_id], example['ind'][task_id], target_box)
 
             loc_loss = (box_loss*box_loss.new_tensor(self.code_weights)).sum()
             
-            loss = hm_loss + self.weight*loc_loss
+            if not mmask.any():
+                hm_loss = hm_loss * 0
+                loc_loss = loc_loss * 0
+                box_loss = box_loss * 0
+                example['mask'][task_id][:] = 0
+            
+            loss = ret.get('loss', torch.tensor(0.0))
+            loss = loss.to(hm_loss)
+            loss += hm_loss + self.weight*loc_loss
 
             ret.update({'loss': loss, 'hm_loss': hm_loss.detach().cpu(), 'loc_loss':loc_loss, 'loc_loss_elem': box_loss.detach().cpu(), 'num_positive': example['mask'][task_id].float().sum()})
 
-            rets.append(ret)
-
+        rets = [ret]
         """convert batch-key to key-batch
         """
         rets_merged = defaultdict(list)
@@ -445,6 +381,21 @@ class CenterHead(nn.Module):
                     ret[k] = torch.cat([ret[i][k] for ret in rets])
 
             ret['metadata'] = metas[0][i]
+            if True:
+                import ipdb; ipdb.set_trace()
+                from det3d.core.utils.visualization import Visualizer
+                from det3d.core.bbox import box_np_ops
+                vis = Visualizer([0.1, 0.1, 0.15], [-75.2, -75.2])
+                box = ret['box3d_lidar'].detach().cpu().numpy()
+                corners = box_np_ops.center_to_corner_box3d(
+                    box[:, :3], box[:, 3:6], box[:, 6], axis=2)
+                scores = ret['scores'].detach().cpu().numpy()
+                labels = ret['label_preds'].detach().cpu().numpy()
+                vis.boxes('box-all', corners, labels=labels)
+                vis.boxes('box > 0.2', corners[scores > 0.2], labels=labels[scores > 0.2])
+                points = example['points'].detach().cpu()
+                vis.pointcloud('points', points[points[:, 0] == i, 1:4])
+                vis.show()
             ret_list.append(ret)
 
         return ret_list 
@@ -495,14 +446,3 @@ class CenterHead(nn.Module):
             prediction_dicts.append(prediction_dict)
 
         return prediction_dicts 
-
-import numpy as np 
-def _circle_nms(boxes, min_radius, post_max_size=83):
-    """
-    NMS according to center distance
-    """
-    keep = np.array(circle_nms(boxes.cpu().numpy(), thresh=min_radius))[:post_max_size]
-
-    keep = torch.from_numpy(keep).long().to(boxes.device)
-
-    return keep  

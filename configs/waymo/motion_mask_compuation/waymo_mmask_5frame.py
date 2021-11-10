@@ -38,8 +38,8 @@ voxel_generator = dict(
 train_pipeline = [
     dict(type="LoadPointCloudFromFile", dataset=dataset_type),
     dict(type="LoadPointCloudAnnotations", with_bbox=True),
-    dict(type='LoadLiDARSequence', debug=True),
-    dict(type='FindMovingBoxes', debug=True),
+    dict(type='LoadLiDARSequence', debug=False),
+    dict(type='FindMovingBoxes', debug=False),
     ##dict(type='FilterIsolatedPoints', debug=True),
     #dict(type='FilterGround', rel_threshold=0.5, debug=True, lamb=10),
     #dict(type='TemporalVoxelization', voxel_size=[0.6, 0.6, 0.6, 1], debug=True),

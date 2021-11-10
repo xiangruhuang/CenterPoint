@@ -13,7 +13,12 @@ class Sequence:
         self.seq_id = int(info['path'].split('/')[-1].split('_')[1])
         self.frames = []
         for frame_path in frame_paths:
-            self.frames.append(Frame(frame_path))
+            try:
+                self.frames.append(Frame(frame_path))
+            except Exception as e:
+                print(e)
+                import ipdb; ipdb.set_trace()
+                pass
    
     def toglobal(self):
         for frame in self.frames:

@@ -48,19 +48,23 @@ class Frame:
         self.scene_name = anno_dict['scene_name']
         cls_map = {'VEHICLE':0, 'PEDESTRIAN':1, 'CYCLIST':2}
         label_map = {0:-1, 1:0, 2:1, 3:-1, 4:2}
-        self.boxes = np.stack([o['box'] for o in anno_dict['objects']], axis=0)
+        self.boxes = np.array([o['box'] for o in anno_dict['objects']])
         self.global_speed = np.array([o['global_speed']
                                      for o in anno_dict['objects']])
         self.global_accel = np.array([o['global_accel']
                                      for o in anno_dict['objects']])
-        self.boxes[:, -1] *= -1
+        #if self.boxes.shape[0] > 0:
+        #    self.boxes[:, -1] *= -1
         self.tokens = np.array([o['name'] for o in anno_dict['objects']]
                                ).astype(str)
         cls = [label_map[o['label']] if o['num_points'] > 0 else -1 \
                for o in anno_dict['objects']]
         self.classes = np.array(cls)
-        self.corners = box_np_ops.center_to_corner_box3d(
-            self.boxes[:, :3], self.boxes[:, 3:6], self.boxes[:, -1], axis=2)
+        if self.boxes.shape[0] > 0:
+            self.corners = box_np_ops.center_to_corner_box3d(
+                self.boxes[:, :3], self.boxes[:, 3:6], -self.boxes[:, -1], axis=2)
+        else:
+            self.corners = np.zeros((0, 8, 3))
         mask = (self.classes != -1)
         self.corners = self.corners[mask]
         self.classes = self.classes[mask]

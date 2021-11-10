@@ -52,6 +52,11 @@ def parse_args():
         action="store_true",
         help="automatically scale lr with the number of gpus",
     )
+    parser.add_argument(
+        "--split",
+        default=0,
+        type=int,
+    )
     args = parser.parse_args()
     if "LOCAL_RANK" not in os.environ:
         os.environ["LOCAL_RANK"] = str(args.local_rank)
@@ -91,8 +96,11 @@ def main():
     logger.info(f"torch.backends.cudnn.benchmark: {torch.backends.cudnn.benchmark}")
 
     dataset = build_dataset(cfg.data.train)
-    for data in dataset:
-        data
+    n = len(dataset)
+    for i in range(n):
+        if i % 8 != args.split:
+            continue
+        data = dataset[i]
 
 if __name__ == "__main__":
     main()

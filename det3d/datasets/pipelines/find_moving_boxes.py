@@ -25,14 +25,14 @@ class FindMovingBoxes(object):
                         'scene_name': f.scene_name,
                         } for i, f in enumerate(seq.frames)]
         for trace_dict in object_traces:
-            if trace_dict['frame_ids'].shape[0] < 20:
+            if trace_dict['frame_ids'].shape[0] < 40:
                 continue
             corners = trace_dict['corners']
             #diff = torch.tensor(corners[:-1] - corners[1:]).sum(-1)
             dist = torch.tensor(corners[0] - corners[-1]).norm(p=2, dim=-1).mean()
             #velocity = diff.norm(p=2, dim=-1).mean(dim=-1)
             #if velocity.sum() < 10:
-            if dist < 5:
+            if dist < 7:
                 continue
             for i, frame_id in enumerate(trace_dict['frame_ids']):
                 obj = dict(id=len(frame_dicts[frame_id]['objects']),
@@ -54,7 +54,6 @@ class FindMovingBoxes(object):
         #                frame_dict[key] = np.stack(frame_dict[key], axis=0)
 
         seq_id = seq.seq_id
-        print(f'saving sequence {seq_id}')
         for fid, frame_dict in enumerate(frame_dicts):
             filename=f'data/Waymo/train_moving/annos/seq_{seq_id}_frame_{fid}.pkl'
             try:
@@ -63,6 +62,7 @@ class FindMovingBoxes(object):
             except Exception as e:
                 import ipdb; ipdb.set_trace()
                 print(e)
+        print(f'saved sequence {seq_id}')
         end_time = time.time()
         if self.debug:
             from det3d.core.utils.visualization import Visualizer

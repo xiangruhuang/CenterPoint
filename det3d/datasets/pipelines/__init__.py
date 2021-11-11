@@ -12,6 +12,7 @@ from .temporal_voxelization import TemporalVoxelization
 from .find_components import FindConnectedComponents
 from .filter_isolated import FilterIsolatedPoints
 from .find_moving_boxes import FindMovingBoxes
+from .visualization import Visualization
 
 __all__ = [
     "Compose",
@@ -36,4 +37,5 @@ __all__ = [
     "FindConnectedComponents",
     "FilterIsolatedPoints",
     "FindMovingBoxes",
+    "Visualization",
 ]

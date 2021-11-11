@@ -17,7 +17,6 @@ class FindMovingBoxes(object):
         start_time = time.time()
         seq = res['lidar_sequence']
         object_traces = seq.object_traces()
-        #moving_object_dict = {'frame_ids': [], 'boxes': [], 'corners': [], 'classes': []}
         frame_dicts = [{'frame_id': i,
                         'veh_to_global': f.T.reshape(-1),
                         'objects': [],
@@ -25,14 +24,11 @@ class FindMovingBoxes(object):
                         'scene_name': f.scene_name,
                         } for i, f in enumerate(seq.frames)]
         for trace_dict in object_traces:
-            if trace_dict['frame_ids'].shape[0] < 40:
+            if trace_dict['frame_ids'].shape[0] < 20:
                 continue
             corners = trace_dict['corners']
-            #diff = torch.tensor(corners[:-1] - corners[1:]).sum(-1)
             dist = torch.tensor(corners[0] - corners[-1]).norm(p=2, dim=-1).mean()
-            #velocity = diff.norm(p=2, dim=-1).mean(dim=-1)
-            #if velocity.sum() < 10:
-            if dist < 7:
+            if dist < 5:
                 continue
             for i, frame_id in enumerate(trace_dict['frame_ids']):
                 obj = dict(id=len(frame_dicts[frame_id]['objects']),
@@ -44,14 +40,6 @@ class FindMovingBoxes(object):
                            num_points=100,
                           )
                 frame_dicts[frame_id]['objects'].append(obj)
-        
-        #for frame_dict in frame_dicts:
-        #    for key in frame_dict.keys():
-        #        if len(frame_dict[key]) > 0:
-        #            if key == 'classes':
-        #                frame_dict[key] = np.array(frame_dict[key])
-        #            else:
-        #                frame_dict[key] = np.stack(frame_dict[key], axis=0)
 
         seq_id = seq.seq_id
         for fid, frame_dict in enumerate(frame_dicts):
@@ -75,7 +63,7 @@ class FindMovingBoxes(object):
                 objects = frame_dict['objects']
                 boxes = np.array([o['box'] for o in objects])
                 corners = box_np_ops.center_to_corner_box3d(
-                    boxes[:, :3], boxes[:, 3:6], boxes[:, -1], axis=2)
+                    boxes[:, :3], boxes[:, 3:6], -boxes[:, -1], axis=2)
                 T = frame_dict['veh_to_global'].reshape(4, 4)
                 corners = (corners.reshape(-1, 3) @ T[:3, :3].T + T[:3, 3]
                            ).reshape(-1, 8, 3)

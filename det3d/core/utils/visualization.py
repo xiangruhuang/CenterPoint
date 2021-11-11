@@ -76,7 +76,7 @@ class Visualizer:
                  )
         if labels is not None:
             # R->Car, G->Ped, B->Cyc
-            colors = np.array([[1,0,0], [0,1,0], [0,0,1]])
+            colors = np.array([[1,0,0], [0,1,0], [0,0,1], [0,1,1], [1,0,1], [1,1,0]])
             labels = np.repeat(labels[:, np.newaxis], 8, axis=-1).reshape(-1)
             ps_box.add_color_quantity('class', colors[labels],
                                       defined_on='nodes', enabled=True)

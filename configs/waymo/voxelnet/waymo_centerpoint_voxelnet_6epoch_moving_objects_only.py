@@ -79,28 +79,28 @@ dataset_type = "WaymoDataset"
 nsweeps = 1
 data_root = "data/Waymo"
 
-#db_sampler = dict(
-#    type="GT-AUG",
-#    enable=False,
-#    db_info_path="data/Waymo/dbinfos_train_1sweeps_withvelo.pkl",
-#    sample_groups=[
-#        dict(VEHICLE=15),
-#        dict(PEDESTRIAN=10),
-#        dict(CYCLIST=10),
-#    ],
-#    db_prep_steps=[
-#        dict(
-#            filter_by_min_num_points=dict(
-#                VEHICLE=5,
-#                PEDESTRIAN=5,
-#                CYCLIST=5,
-#            )
-#        ),
-#        dict(filter_by_difficulty=[-1],),
-#    ],
-#    global_random_rotation_range_per_object=[0, 0],
-#    rate=1.0,
-#) 
+db_sampler = dict(
+    type="GT-AUG",
+    enable=False,
+    db_info_path="data/Waymo/dbinfos_train_1sweeps_withvelo.pkl",
+    sample_groups=[
+        dict(VEHICLE=15),
+        dict(PEDESTRIAN=10),
+        dict(CYCLIST=10),
+    ],
+    db_prep_steps=[
+        dict(
+            filter_by_min_num_points=dict(
+                VEHICLE=5,
+                PEDESTRIAN=5,
+                CYCLIST=5,
+            )
+        ),
+        dict(filter_by_difficulty=[-1],),
+    ],
+    global_random_rotation_range_per_object=[0, 0],
+    rate=1.0,
+) 
 
 train_preprocessor = dict(
     mode="train",
@@ -126,6 +126,7 @@ voxel_generator = dict(
 train_pipeline = [
     dict(type="LoadPointCloudFromFile", dataset=dataset_type),
     dict(type="LoadPointCloudAnnotations", with_bbox=True),
+    dict(type="Visualization", points=True, boxes=True),
     dict(type="Preprocess", cfg=train_preprocessor),
     dict(type="Voxelization", cfg=voxel_generator),
     dict(type="AssignLabel", cfg=train_cfg["assigner"]),

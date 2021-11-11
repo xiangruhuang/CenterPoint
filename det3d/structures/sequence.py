@@ -60,6 +60,13 @@ class Sequence:
             classes.append(f.classes)
         classes = np.concatenate(classes, axis=0)
         return classes
+    
+    def origin_classes(self):
+        classes = []
+        for f in self.frames:
+            classes.append(f.origin_classes)
+        classes = np.concatenate(classes, axis=0)
+        return classes
 
     def tokens(self):
         tokens = []
@@ -75,7 +82,7 @@ class Sequence:
                 obj_box = (f.frame_id,
                            f.boxes[tid],
                            f.corners[tid],
-                           f.classes[tid],
+                           f.origin_classes[tid],
                            f.global_speed[tid],
                            f.global_accel[tid],
                            token)

@@ -32,7 +32,9 @@ class Frame:
     def load_points(self):
         self.lidar_file = get_pickle(self.path)['lidars']
         self.points = np.fromfile(self.lidar_file,
-                                  dtype=np.float32).reshape(-1, 6)[:, :3]
+                                  dtype=np.float32).reshape(-1, 6)
+        self.feats = self.points[:, 3:]
+        self.points = self.points[:, :3]
         self.mask = np.ones(self.points.shape[0], dtype=bool)
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(self.points)
@@ -85,5 +87,6 @@ class Frame:
         self.mask[premask][:] = False
         self.mask[premask][mask] = True
         self.points = self.points[mask]
+        self.feats = self.feats[mask]
         self.normals = self.normals[mask]
 

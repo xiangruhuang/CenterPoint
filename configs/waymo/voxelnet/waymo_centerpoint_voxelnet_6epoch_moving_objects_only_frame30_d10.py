@@ -81,7 +81,7 @@ data_root = "data/Waymo"
 
 db_sampler = dict(
     type="GT-AUG",
-    #enable=False,
+    enable=False,
     db_info_path="data/Waymo/dbinfos_train_1sweeps_withvelo.pkl",
     sample_groups=[
         dict(VEHICLE=15),
@@ -107,7 +107,7 @@ train_preprocessor = dict(
     shuffle_points=True,
     global_rot_noise=[-0.78539816, 0.78539816],
     global_scale_noise=[0.95, 1.05],
-    db_sampler=db_sampler,
+    db_sampler=None, #db_sampler,
     class_names=class_names,
 )
 
@@ -141,7 +141,7 @@ test_pipeline = [
     dict(type="Reformat"),
 ]
 
-train_anno = "data/Waymo/infos_train_moving_01sweeps_filter_zero_gt.pkl"
+train_anno = "data/Waymo/infos_train_moving_frame30_d10_01sweeps_filter_zero_gt.pkl"
 #val_anno = "data/Waymo/infos_train_moving_01sweeps_filter_zero_gt.pkl"
 val_anno = "data/Waymo/infos_val_01sweeps_filter_zero_gt.pkl"
 test_anno = None

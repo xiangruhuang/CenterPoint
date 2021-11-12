@@ -24,11 +24,11 @@ class FindMovingBoxes(object):
                         'scene_name': f.scene_name,
                         } for i, f in enumerate(seq.frames)]
         for trace_dict in object_traces:
-            if trace_dict['frame_ids'].shape[0] < 20:
+            if trace_dict['frame_ids'].shape[0] < 30:
                 continue
             corners = trace_dict['corners']
             dist = torch.tensor(corners[0] - corners[-1]).norm(p=2, dim=-1).mean()
-            if dist < 5:
+            if dist < 10:
                 continue
             for i, frame_id in enumerate(trace_dict['frame_ids']):
                 obj = dict(id=len(frame_dicts[frame_id]['objects']),
@@ -43,11 +43,12 @@ class FindMovingBoxes(object):
 
         seq_id = seq.seq_id
         for fid, frame_dict in enumerate(frame_dicts):
-            filename=f'data/Waymo/train_moving/annos/seq_{seq_id}_frame_{fid}.pkl'
+            filename=f'data/Waymo/train_moving_frame30_d10/annos/seq_{seq_id}_frame_{fid}.pkl'
             try:
                 with open(filename, 'wb') as fout:
                     pickle.dump(dict(frame_dict), fout)
             except Exception as e:
+                print(filename, e)
                 import ipdb; ipdb.set_trace()
                 print(e)
         print(f'saved sequence {seq_id}')

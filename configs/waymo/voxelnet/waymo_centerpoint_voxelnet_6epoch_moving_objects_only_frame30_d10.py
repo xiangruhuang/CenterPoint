@@ -141,7 +141,7 @@ test_pipeline = [
     dict(type="Reformat"),
 ]
 
-train_anno = "data/Waymo/infos_train_moving_01sweeps_filter_zero_gt.pkl"
+train_anno = "data/Waymo/infos_train_moving_frame30_d10_01sweeps_filter_zero_gt.pkl"
 #val_anno = "data/Waymo/infos_train_moving_01sweeps_filter_zero_gt.pkl"
 val_anno = "data/Waymo/infos_val_01sweeps_filter_zero_gt.pkl"
 test_anno = None

@@ -98,7 +98,7 @@ def main():
     dataset = build_dataset(cfg.data.train)
     n = len(dataset)
     for i in range(n):
-        if i % 8 != args.split:
+        if i % 8 != args.local_rank:
             continue
         data = dataset[i]
 

@@ -97,10 +97,11 @@ def main():
 
     if args.local_rank == 0:
         # copy important files to backup
-        backup_dir = os.path.join(cfg.work_dir, "det3d")
-        os.makedirs(backup_dir, exist_ok=True)
-        # os.system("cp -r * %s/" % backup_dir)
-        # logger.info(f"Backup source files to {cfg.work_dir}/det3d")
+        #backup_dir = os.path.join(cfg.work_dir, "det3d")
+        #os.makedirs(backup_dir, exist_ok=True)
+        pass
+        #os.system("cp -r * %s/" % backup_dir)
+        #logger.info(f"Backup source files to {cfg.work_dir}/det3d")
 
     # set random seeds
     if args.seed is not None:

@@ -39,7 +39,7 @@ with open(sys.argv[1], 'r') as fin:
         mAPHL1 = mAPH_dict[key][1]
         mAPHL2 = mAPH_dict[key][2]
         mAPH = (mAPHL1 + mAPHL2)/2.0
-        results += [mAPL1, mAPL2, mAP, mAPHL1, mAPHL2, mAPH]
+        results += [mAPL1, mAPL2, mAPHL1, mAPHL2, mAP, mAPH]
         
     for i, r in enumerate(results):
         if i > 0:

@@ -37,6 +37,7 @@ class Preprocess(object):
             self.global_translate_std = cfg.get('global_translate_std', 0)
             self.class_names = cfg.class_names
             if cfg.db_sampler != None:
+                print(f'using db_sampler {cfg.db_sampler}')
                 self.db_sampler = build_dbsampler(cfg.db_sampler)
             else:
                 self.db_sampler = None 

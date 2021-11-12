@@ -2,7 +2,6 @@ import pickle
 import numpy as np
 from det3d.core.bbox import box_np_ops
 import torch
-import open3d as o3d
 
 class Box:
     def __init__(self, frame, box, corners):

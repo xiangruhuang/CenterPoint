@@ -107,7 +107,7 @@ train_preprocessor = dict(
     shuffle_points=True,
     global_rot_noise=[-0.78539816, 0.78539816],
     global_scale_noise=[0.95, 1.05],
-    db_sampler=db_sampler,
+    db_sampler=None, #db_sampler,
     class_names=class_names,
 )
 
@@ -126,7 +126,6 @@ voxel_generator = dict(
 train_pipeline = [
     dict(type="LoadPointCloudFromFile", dataset=dataset_type),
     dict(type="LoadPointCloudAnnotations", with_bbox=True),
-    #dict(type="Visualization", points=True, boxes=True),
     dict(type="Preprocess", cfg=train_preprocessor),
     dict(type="Voxelization", cfg=voxel_generator),
     dict(type="AssignLabel", cfg=train_cfg["assigner"]),
@@ -141,8 +140,7 @@ test_pipeline = [
     dict(type="Reformat"),
 ]
 
-train_anno = "data/Waymo/infos_train_moving_01sweeps_filter_zero_gt.pkl"
-#val_anno = "data/Waymo/infos_train_moving_01sweeps_filter_zero_gt.pkl"
+train_anno = "data/Waymo/infos_train_01sweeps_filter_zero_gt.pkl"
 val_anno = "data/Waymo/infos_val_01sweeps_filter_zero_gt.pkl"
 test_anno = None
 
@@ -157,6 +155,9 @@ data = dict(
         nsweeps=nsweeps,
         class_names=class_names,
         pipeline=train_pipeline,
+        sequence_sampler=dict(
+            seq_interval=10,
+            refill=True),
     ),
     val=dict(
         type=dataset_type,
@@ -194,7 +195,7 @@ lr_config = dict(
 checkpoint_config = dict(interval=1)
 # yapf:disable
 log_config = dict(
-    interval=100,
+    interval=5,
     hooks=[
         dict(type="TextLoggerHook"),
         # dict(type='TensorboardLoggerHook')

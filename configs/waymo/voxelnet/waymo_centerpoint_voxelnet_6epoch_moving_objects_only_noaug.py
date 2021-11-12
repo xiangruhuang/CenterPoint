@@ -126,7 +126,6 @@ voxel_generator = dict(
 train_pipeline = [
     dict(type="LoadPointCloudFromFile", dataset=dataset_type),
     dict(type="LoadPointCloudAnnotations", with_bbox=True),
-    #dict(type="Visualization", points=True, boxes=True),
     dict(type="Preprocess", cfg=train_preprocessor),
     dict(type="Voxelization", cfg=voxel_generator),
     dict(type="AssignLabel", cfg=train_cfg["assigner"]),
@@ -202,7 +201,7 @@ log_config = dict(
 )
 # yapf:enable
 # runtime settings
-total_epochs = 6
+total_epochs = 36
 device_ids = range(8)
 dist_params = dict(backend="nccl", init_method="env://")
 log_level = "INFO"

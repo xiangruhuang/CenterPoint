@@ -107,7 +107,7 @@ train_preprocessor = dict(
     shuffle_points=True,
     global_rot_noise=[-0.78539816, 0.78539816],
     global_scale_noise=[0.95, 1.05],
-    db_sampler=db_sampler,
+    db_sampler=None, #db_sampler,
     class_names=class_names,
 )
 
@@ -201,7 +201,7 @@ log_config = dict(
 )
 # yapf:enable
 # runtime settings
-total_epochs = 36
+total_epochs = 6
 device_ids = range(8)
 dist_params = dict(backend="nccl", init_method="env://")
 log_level = "INFO"

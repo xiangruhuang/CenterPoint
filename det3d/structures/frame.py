@@ -84,8 +84,10 @@ class Frame:
 
     def filter(self, mask):
         premask = self.mask == True
-        self.mask[premask][:] = False
-        self.mask[premask][mask] = True
+        newmask = self.mask[premask]
+        newmask[:] = False
+        newmask[mask] = True
+        self.mask[premask] = newmask
         self.points = self.points[mask]
         self.feats = self.feats[mask]
         self.normals = self.normals[mask]

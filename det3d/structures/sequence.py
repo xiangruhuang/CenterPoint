@@ -23,6 +23,10 @@ class Sequence:
     def toglobal(self):
         for frame in self.frames:
             frame.toglobal()
+    
+    def tolocal(self):
+        for frame in self.frames:
+            frame.tolocal()
 
     def camera_trajectory(self):
         traj = []

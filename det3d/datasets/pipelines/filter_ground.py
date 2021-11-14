@@ -165,7 +165,7 @@ class FilterGround(object):
             save_dict = dict(masks=valid_masks, num_points=num_points,
                              ground=ground_heights, pc_range=pc_range,
                              voxel_size=voxel_size)
-            torch.save(save_dict, filename)
+            #torch.save(save_dict, filename)
         else:
             print('loading ground filtering masks')
             load_dict = torch.load(filename)
@@ -201,7 +201,6 @@ class FilterGround(object):
             ps_p.add_scalar_quantity('frame % 2', p0[:, -1] % 2)
             p1 = seq.points4d()
             ps_p = vis.pointcloud('points', p1[:, :3])
-            import ipdb; ipdb.set_trace()
             ps_g = vis.heatmap('ground', ground_heights.T)
             ps_p.add_scalar_quantity('frame % 2', p1[:, -1] % 2)
             print(f'filter ground: time={end_time-start_time:.4f}')

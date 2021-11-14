@@ -81,7 +81,7 @@ data_root = "data/Waymo"
 
 db_sampler = dict(
     type="GT-AUG",
-    enable=False,
+    #enable=False,
     db_info_path="data/Waymo/dbinfos_train_1sweeps_withvelo.pkl",
     sample_groups=[
         dict(VEHICLE=150),

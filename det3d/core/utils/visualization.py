@@ -14,17 +14,23 @@ class Visualizer:
         self.radius = radius
         ps.set_up_dir('z_up')
         ps.init()
+        self.logs = []
 
     def clear(self):
         ps.remove_all_structures()
+        self.logs = []
    
-    def curvenetwork(self, name, nodes, edges):
+    def curvenetwork(self, name, nodes, edges, logging=True):
+        if logging:
+            self.logs.append(['curvenetwork', name, nodes, edges])
         return ps.register_curve_network(name, nodes, edges, radius=self.radius)
 
-    def pointcloud(self, name, pointcloud, color=None, radius=None):
+    def pointcloud(self, name, pointcloud, color=None, radius=None, logging=True):
         """Visualize non-zero entries of heat map on 3D point cloud.
             point cloud (torch.Tensor, [N, 3])
         """
+        if logging:
+            self.logs.append(['pointcloud', name, pointcloud, color, radius])
         if radius is None:
             radius = self.radius
         if color is None:
@@ -57,11 +63,13 @@ class Visualizer:
         corners, faces = self.get_meshes(planes[:, :3], planes[:, 6:8], planes[:, 8:14])
         return ps.register_surface_mesh(name, corners, faces)
 
-    def boxes(self, name, corners, labels=None):
+    def boxes(self, name, corners, labels=None, logging=True):
         """
             corners (shape=[N, 8, 3]):
             labels (shape=[N])
         """
+        if logging:
+            self.logs.append(['boxes', name, corners, labels])
         edges = [[0, 1], [0, 3], [0, 4], [1, 2],
                  [1, 5], [2, 3], [2, 6], [3, 7],
                  [4, 5], [4, 7], [5, 6], [6, 7]]
@@ -82,10 +90,13 @@ class Visualizer:
                                       defined_on='nodes', enabled=True)
         return ps_box
 
-    def heatmap(self, name, heatmap, color=True, threshold=0.1, radius=2e-4, **kwargs):
+    def heatmap(self, name, heatmap, color=True, threshold=0.1, radius=2e-4,
+                logging=True, **kwargs):
         """Visualize non-zero entries of heat map on 3D point cloud.
             heatmap (torch.Tensor, [W, H])
         """
+        if logging:
+            self.logs.append(['heatmap', name, heatmap, color, threshold, radius])
         if isinstance(heatmap, np.ndarray):
             heatmap = torch.from_numpy(heatmap)
         indices = list(torch.where(heatmap > threshold))
@@ -103,6 +114,26 @@ class Visualizer:
 
     def show(self):
         ps.show()
+    
+    def save(self, path):
+        torch.save(self.logs, path)
+
+    def load(self, path):
+        ps.remove_all_structures()
+        self.logs = torch.load(path)
+        for log in self.logs:
+            if log[0] == 'heatmap':
+                self.heatmap(*log[1:])
+            if log[0] == 'pointcloud':
+                self.pointcloud(*log[1:])
+            if log[0] == 'curvenetwork':
+                self.curvenetwork(*log[1:])
+            if log[0] == 'boxes':
+                self.boxes(*log[1:])
+            if log[0] == 'heatmap':
+                self.heatmap(*log[1:])
+            if log[0] == 'heatmap':
+                self.heatmap(*log[1:])
 
 class SeqVisualizer(Visualizer):
     def __init__(self,
@@ -157,11 +188,9 @@ class SeqVisualizer(Visualizer):
         origin_edges = np.stack([np.arange(0, num_frames-1),
                                  np.arange(1, num_frames)], axis=-1)
         self.curvenetwork('origins', origins, origin_edges)
-        self.show() 
+        self.show()
 
-    def save(self, path):
-        import ipdb; ipdb.set_trace()
 
-    def load(self, path):
-        import ipdb; ipdb.set_trace()
-
+if __name__ == '__main__':
+    vis = Visualizer([], [])
+    vis.save('temp.pth')

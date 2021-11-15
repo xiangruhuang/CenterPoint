@@ -98,7 +98,7 @@ db_sampler = dict(
         ),
         dict(filter_by_difficulty=[-1],),
     ],
-    global_random_rotation_range_per_object=[-0.78539816, 0.78539816],
+    global_random_rotation_range_per_object=[0, 0],
     rate=1.0,
 ) 
 

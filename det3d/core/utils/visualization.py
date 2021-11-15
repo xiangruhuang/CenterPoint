@@ -158,3 +158,10 @@ class SeqVisualizer(Visualizer):
                                  np.arange(1, num_frames)], axis=-1)
         self.curvenetwork('origins', origins, origin_edges)
         self.show() 
+
+    def save(self, path):
+        import ipdb; ipdb.set_trace()
+
+    def load(self, path):
+        import ipdb; ipdb.set_trace()
+

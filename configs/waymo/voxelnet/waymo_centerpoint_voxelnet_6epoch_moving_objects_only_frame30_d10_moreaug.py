@@ -81,10 +81,10 @@ data_root = "data/Waymo"
 
 db_sampler = dict(
     type="GT-AUG",
-    #enable=False,
+    enable=False,
     db_info_path="data/Waymo/dbinfos_train_1sweeps_withvelo.pkl",
     sample_groups=[
-        dict(VEHICLE=15),
+        dict(VEHICLE=150),
         dict(PEDESTRIAN=10),
         dict(CYCLIST=10),
     ],
@@ -98,7 +98,7 @@ db_sampler = dict(
         ),
         dict(filter_by_difficulty=[-1],),
     ],
-    global_random_rotation_range_per_object=[0, 0],
+    global_random_rotation_range_per_object=[-0.78539816, 0.78539816],
     rate=1.0,
 ) 
 
@@ -126,6 +126,7 @@ voxel_generator = dict(
 train_pipeline = [
     dict(type="LoadPointCloudFromFile", dataset=dataset_type),
     dict(type="LoadPointCloudAnnotations", with_bbox=True),
+    #dict(type="Visualization", points=True, boxes=True),
     dict(type="Preprocess", cfg=train_preprocessor),
     dict(type="Voxelization", cfg=voxel_generator),
     dict(type="AssignLabel", cfg=train_cfg["assigner"]),
@@ -140,7 +141,7 @@ test_pipeline = [
     dict(type="Reformat"),
 ]
 
-train_anno = "data/Waymo/infos_train_moving_01sweeps_filter_zero_gt.pkl"
+train_anno = "data/Waymo/infos_train_moving_frame30_d10_01sweeps_filter_zero_gt.pkl"
 #val_anno = "data/Waymo/infos_train_moving_01sweeps_filter_zero_gt.pkl"
 val_anno = "data/Waymo/infos_val_01sweeps_filter_zero_gt.pkl"
 test_anno = None

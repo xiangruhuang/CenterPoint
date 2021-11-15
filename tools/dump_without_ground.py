@@ -98,11 +98,18 @@ def main():
     dataset = build_dataset(cfg.data.train)
     n = len(dataset)
     for i in range(n):
-        if i % 8 != args.split:
+        if i % 8 != args.local_rank:
             continue
         data = dataset[i]
-        import ipdb; ipdb.set_trace()
-        pass
+        seq = data['lidar_sequence']
+        seq_id = seq.seq_id
+        seq.tolocal()
+        for frame_id, frame in enumerate(seq.frames):
+            points = frame.points
+            feats = frame.feats
+            data = np.concatenate([points, feats], axis=1)[:, :5]
+            filename = f'/mnt/xrhuang/datasets/waymo/kitti_format/training/velodyne_noground/0{seq_id:03d}{frame_id:03d}.bin'
+            data.astype(np.float32).tofile(filename)
 
 if __name__ == "__main__":
     main()

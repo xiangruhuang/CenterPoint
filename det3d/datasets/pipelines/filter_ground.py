@@ -165,7 +165,7 @@ class FilterGround(object):
             save_dict = dict(masks=valid_masks, num_points=num_points,
                              ground=ground_heights, pc_range=pc_range,
                              voxel_size=voxel_size)
-            torch.save(save_dict, filename)
+            #torch.save(save_dict, filename)
         else:
             print('loading ground filtering masks')
             load_dict = torch.load(filename)

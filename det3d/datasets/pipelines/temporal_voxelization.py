@@ -47,12 +47,11 @@ class TemporalVoxelization(object):
             from det3d.core.utils.visualization import Visualizer
             vis = Visualizer([], [])
             ps_p = vis.pointcloud('points', res['points'][:, :3])
-            ps_p.add_scalar_quantity('frame % 2', 
-                res['points'][:, -1].numpy() % 2)
+            vis.pc_scalar('points', 'frame % 2', res['points'][:, -1].numpy() % 2)
             ps_v = vis.pointcloud('voxels', res['voxels'][:, :3])
-            ps_v.add_scalar_quantity('frame % 2',
-                res['voxels'][:, -1].numpy() % 2)
+            vis.pc_scalar('voxels', 'frame % 2', res['voxels'][:, -1].numpy() % 2)
             print(f'temporal voxelization: time={end_time-start_time:.4f}')
-            vis.show()
+            vis.save('/afs/csail.mit.edu/u/x/xrhuang/public_html/temporal_voxelization.pth')
+            #vis.show()
 
         return res, info

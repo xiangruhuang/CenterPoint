@@ -7,18 +7,33 @@ class Visualizer:
                  voxel_size,
                  pc_range,
                  size_factor=8,
-                 radius=2e-4):
+                 radius=2e-4,
+                 silent=True):
         self.voxel_size = voxel_size
         self.pc_range = pc_range
         self.size_factor = size_factor
         self.radius = radius
-        ps.set_up_dir('z_up')
-        ps.init()
+        self.silent = silent
+        if not self.silent:
+            ps.set_up_dir('z_up')
+            ps.init()
         self.logs = []
 
     def clear(self):
         ps.remove_all_structures()
         self.logs = []
+
+    def pc_scalar(self, pc_name, name, quantity, logging=True):
+        if logging:
+            self.logs.append(['pc_scalar', pc_name, name, quantity])
+        if not self.silent:
+            ps.get_point_cloud(pc_name).add_scalar_quantity(name, quantity)
+    
+    def pc_color(self, pc_name, name, color, enabled=False, logging=True):
+        if logging:
+            self.logs.append(['pc_color', pc_name, name, color, enabled])
+        if not self.silent:
+            ps.get_point_cloud(pc_name).add_color_quantity(name, color, enabled=enabled)
    
     def curvenetwork(self, name, nodes, edges, logging=True):
         if logging:
@@ -107,12 +122,14 @@ class Visualizer:
 
         coors = torch.stack([*indices, heights], dim=-1)
         ps_p = ps.register_point_cloud(name, coors, radius=radius, **kwargs)
-        if color:
+        if color and not self.silent:
             ps_p.add_scalar_quantity("height", (coors[:, -1]), enabled=True) 
 
         return ps_p
 
     def show(self):
+        ps.set_up_dir('z_up')
+        ps.init()
         ps.show()
     
     def save(self, path):
@@ -122,18 +139,19 @@ class Visualizer:
         ps.remove_all_structures()
         self.logs = torch.load(path)
         for log in self.logs:
+            print(log[0])
             if log[0] == 'heatmap':
-                self.heatmap(*log[1:])
+                self.heatmap(*log[1:], logging=False)
             if log[0] == 'pointcloud':
-                self.pointcloud(*log[1:])
+                self.pointcloud(*log[1:], logging=False)
             if log[0] == 'curvenetwork':
-                self.curvenetwork(*log[1:])
+                self.curvenetwork(*log[1:], logging=False)
             if log[0] == 'boxes':
-                self.boxes(*log[1:])
-            if log[0] == 'heatmap':
-                self.heatmap(*log[1:])
-            if log[0] == 'heatmap':
-                self.heatmap(*log[1:])
+                self.boxes(*log[1:], logging=False)
+            if log[0] == 'pc_scalar':
+                self.pc_scalar(*log[1:], logging=False)
+            if log[0] == 'pc_color':
+                self.pc_scalar(*log[1:], logging=False)
 
 class SeqVisualizer(Visualizer):
     def __init__(self,

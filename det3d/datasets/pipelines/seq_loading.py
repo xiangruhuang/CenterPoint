@@ -27,9 +27,10 @@ class LoadLiDARSequence(object):
             vis = Visualizer([], [])
             p = seq.points4d()
             ps_p = vis.pointcloud('points', p[:, :3])
-            ps_p.add_scalar_quantity('frame % 2', p[:, -1] % 2)
+            vis.pc_scalar('points', 'frame % 2', p[:, -1] % 2)
             vis.boxes('box-original', seq.corners(), seq.classes())
             print(f'load lidar sequence: time={end_time-start_time:.4f}')
-            vis.show()
+            #vis.save('/afs/csail.mit.edu/u/x/xrhuang/public_html/load_lidar_sequence.pth')
+            #vis.show()
 
         return res, info

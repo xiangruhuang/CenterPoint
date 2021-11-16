@@ -46,7 +46,6 @@ class Registration(object):
         voxels4d = res['voxels']
         vp_edges_all = res['vp_edges']
         point_offset, voxel_offset = 0, 0
-        import ipdb; ipdb.set_trace()
         
         for i in range(num_frames-frame_window_size):
             # pre-processing
@@ -65,15 +64,17 @@ class Registration(object):
                 from det3d.core.utils.visualization import Visualizer
                 vis = Visualizer([], [])
                 frame_colors = torch.randn(len(seq.frames), 3)
-                ps_p = vis.pointcloud('points', points[:, :3])
-                ps_p.add_color_quantity(
-                    'frame', frame_colors[points[:, -1].long()],
-                    enabled=False)
-                ps_p.add_color_quantity(
-                    'frame % 2', frame_colors[points[:, -1].long() % 2],
-                    enabled=True)
-                vis.show()
-
+                ps_p = vis.pointcloud('points-before', points[:, :3])
+                vis.pc_color('points-before', 'frame',
+                    frame_colors[points[:, -1].long()],
+                    )
+                vis.pc_color(
+                    'points-before',
+                    'frame % 2',
+                    frame_colors[points[:, -1].long() % 2],
+                    )
+                vis.save('/afs/csail.mit.edu/u/x/xrhuang/public_html/registration.pth')
+            assert False
             # register from frame i to frame i+d
             self.register(points, normals, voxels, vp_edges)
             
@@ -97,4 +98,6 @@ class Registration(object):
                                     dim_size=num_graphs, reduce='mean')
             vis.pointcloud('graph centers', graph_centers, radius=10e-4)
             print(f'find connected components: time={end_time-start_time:.4f}')
-            vis.show()
+            vis.save('/afs/csail.mit.edu/u/x/xrhuang/public_html/registration2.pth')
+            #vis.show()
+

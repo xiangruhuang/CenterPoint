@@ -189,7 +189,9 @@ class FilterGround(object):
         if self.debug:
             from det3d.core.utils.visualization import Visualizer
             p0 = seq.points4d()
+            import ipdb; ipdb.set_trace()
 
+        print('filtering ground')
         ground_heights, pc_range, voxel_size = \
                 self.filter_ground(seq,
                                    rel_threshold=self.rel_threshold)
@@ -197,13 +199,15 @@ class FilterGround(object):
         end_time = time.time()
         if self.debug:
             vis = Visualizer(voxel_size, pc_range, size_factor=1)
-            ps_p = vis.pointcloud('original points', p0[:, :3])
-            ps_p.add_scalar_quantity('frame % 2', p0[:, -1] % 2)
+            #ps_p = vis.pointcloud('original points', p0[:, :3])
+            #vis.pc_scalar('original points', 'frame % 2', p0[:, -1] % 2)
             p1 = seq.points4d()
+            import ipdb; ipdb.set_trace()
             ps_p = vis.pointcloud('points', p1[:, :3])
             ps_g = vis.heatmap('ground', ground_heights.T)
-            ps_p.add_scalar_quantity('frame % 2', p1[:, -1] % 2)
+            vis.pc_scalar('points', 'frame % 2', p1[:, -1] % 2)
             print(f'filter ground: time={end_time-start_time:.4f}')
-            vis.show()
+            vis.save('/afs/csail.mit.edu/u/x/xrhuang/public_html/filter_ground.pth')
+            #vis.show()
 
         return res, info

@@ -28,14 +28,18 @@ class Sequence:
         for frame in self.frames:
             frame.tolocal()
 
-    def camera_trajectory(self):
+    def camera_trajectory(self, start_frame=0, end_frame=-1):
         traj = []
-        for frame in self.frames:
+        if end_frame == -1:
+            end_frame = len(self.frames)
+        for frame in self.frames[start_frame:end_frame]:
             traj.append(frame.camera_loc)
 
-    def points4d(self):
+    def points4d(self, start_frame=0, end_frame=-1):
         points = []
-        for f in self.frames:
+        if end_frame == -1:
+            end_frame = len(self.frames)
+        for f in self.frames[start_frame:end_frame]:
             s = f.points
             frame_id = np.ones((s.shape[0], 1)) * f.frame_id
             s = np.concatenate([s, frame_id], axis=-1)
@@ -43,38 +47,48 @@ class Sequence:
         points = np.concatenate(points, axis=0)
         return points
 
-    def normals(self):
+    def normals(self, start_frame=0, end_frame=-1):
         normals = []
-        for f in self.frames:
+        if end_frame == -1:
+            end_frame = len(self.frames)
+        for f in self.frames[start_frame:end_frame]:
             normals.append(f.normals)
 
         normals = np.concatenate(normals, axis=0)
         return normals
 
-    def corners(self):
+    def corners(self, start_frame=0, end_frame=-1):
         corners = []
-        for f in self.frames:
+        if end_frame == -1:
+            end_frame = len(self.frames)
+        for f in self.frames[start_frame:end_frame]:
             corners.append(f.corners)
         corners = np.concatenate(corners, axis=0)
         return corners
     
-    def classes(self):
+    def classes(self, start_frame=0, end_frame=-1):
         classes = []
-        for f in self.frames:
+        if end_frame == -1:
+            end_frame = len(self.frames)
+        for f in self.frames[start_frame:end_frame]:
             classes.append(f.classes)
         classes = np.concatenate(classes, axis=0)
         return classes
     
-    def origin_classes(self):
+    def origin_classes(self, start_frame=0, end_frame=-1):
         classes = []
-        for f in self.frames:
+        if end_frame == -1:
+            end_frame = len(self.frames)
+        for f in self.frames[start_frame:end_frame]:
             classes.append(f.origin_classes)
         classes = np.concatenate(classes, axis=0)
         return classes
 
-    def tokens(self):
+    def tokens(self, start_frame=0, end_frame=-1):
         tokens = []
-        for f in self.frames:
+        if end_frame == -1:
+            end_frame = len(self.frames)
+        for f in self.frames[start_frame:end_frame]:
             tokens.append(f.tokens)
         tokens = np.concatenate(tokens, axis=0)
         return tokens

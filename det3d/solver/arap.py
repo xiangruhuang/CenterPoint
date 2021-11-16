@@ -23,6 +23,7 @@ class MultiFrameARAP:
         self.device = 'cpu'
         self.dtype = torch.float64
         self.lamb = lamb
+        voxel_size = torch.tensor(voxel_size)
         self.voxel_size = voxel_size.to(self.dtype).to(self.device)
         self.ref_points = points.to(self.device).to(self.dtype)
         self.ref_voxels = voxels.to(self.device).to(self.dtype)
@@ -192,12 +193,12 @@ class MultiFrameARAP:
         rigid_energy_vec = 0.5*(w11*(R0-R1)).cpu().square().sum(-1).sum(-1)
         rigid_energy_vec += 0.5*(w1*(t0 - t1)).cpu().square().sum(-1)
         edges = torch.stack([se0, se1], dim=-1).cpu()
-        ps_rigid = self.vis.curvenetwork(
-                       'rigid graph',
-                       self.ref_voxels[self.active_voxels, :3].cpu(), edges)
-        ps_rigid.add_scalar_quantity('rigid loss',
-                                     rigid_energy_vec.cpu().numpy(),
-                                     defined_on='edges', enabled=True)
+        #ps_rigid = self.vis.curvenetwork(
+        #               'rigid graph',
+        #               self.ref_voxels[self.active_voxels, :3].cpu(), edges)
+        #ps_rigid.add_scalar_quantity('rigid loss',
+        #                             rigid_energy_vec.cpu().numpy(),
+        #                             defined_on='edges', enabled=True)
         rigid_energy = rigid_energy_vec.sum()
         
         H_diag = self.H_diag[self.active_voxels]
@@ -265,10 +266,14 @@ class MultiFrameARAP:
         bv = self.bvoxels[self.active_voxels]
         ref_v = self.ref_voxels[self.active_voxels]
         self.vv1_b, self.vv0_b = self.ht.find_corres(
-                                     ref_v, bv, self.tgraph_voxel_size, -1)
+                                     ref_v, bv, self.tgraph_voxel_size, -1
+                                     ).to(self.device)
         fv = self.fvoxels[self.active_voxels]
         self.vv0_f, self.vv1_f = self.ht.find_corres(
-                                     ref_v, fv, self.tgraph_voxel_size, 1)
+                                     ref_v, fv, self.tgraph_voxel_size, 1
+                                     ).to(self.device)
+        self.vv0_f = self.vv0_f.to(self.device)
+        self.vv1_f = self.vv1_f.to(self.device)
         mask = self.is_active_voxels[self.vv0] | self.is_active_voxels[self.vv1]
         vv0, vv1 = self.vv0, self.vv1
         #voxel_graph(v.cpu().float(), v.cpu().float(), self.vgraph_voxel_size.cpu(),
@@ -372,7 +377,6 @@ class MultiFrameARAP:
             trace['frame_ids'].append(self.frame_ids[i])
             object_traces[token] = trace
         self.visualize_frames('all', self.ref_points, self.ref_normals, self.ref_voxels)
-        import ipdb; ipdb.set_trace()
         for token, trace in object_traces.items():
             boxes = trace['boxes']
             corners = trace['corners']
@@ -399,7 +403,6 @@ class MultiFrameARAP:
             points_synced = np.concatenate(points_synced, axis=0)
             self.vis.pointcloud(f'token-points', points_synced[:, :3])
             self.vis.show()
-            import ipdb; ipdb.set_trace()
 
     def solve(self, max_iter=10000):
         """solve the optimization.
@@ -443,18 +446,26 @@ class MultiFrameARAP:
             rt[:] = 0.0
 
             # build dynamic graph
+            print('finding correspondence')
             self.construct_time -= time.time()
             self.corres_f = self.ht.find_corres(
-                q, self.fpoints[p], self.corres_voxel_size, 1)
+                q, self.fpoints[self.active_points], self.corres_voxel_size, 1
+                ).to(self.device)
+
             self.corres_b = self.ht.find_corres(
-                q, self.bpoints[p], self.corres_voxel_size, -1)
+                q, self.bpoints[self.active_points], self.corres_voxel_size, -1
+                ).to(self.device)
             self.construct_time += time.time()
+            print('building dynamic graph')
             self.build_rigid_graph()
             
             # start constructing quadratic problem
+            print('solving registration')
             self.solve_reg()
+            print('solving local rigidity')
             H_off_diag = self.solve_rigid()
-            #graph_index = torch.tensor(self.find_graphs()).long().to(self.device)
+            print('solving linear equations')
+            import ipdb; ipdb.set_trace()
             self.solve_time -= time.time()
             spH = SparseMatPrep(self.num_voxels * 6)
             spH.add_off_diag(H_off_diag.cpu(), self.edges0.cpu(), self.edges1.cpu())
@@ -468,22 +479,35 @@ class MultiFrameARAP:
 
             # apply transformations
             self.construct_time -= time.time()
+            print('updating positions')
             self.update_pos(rt)
 
             # visualization
+            print('visualizing')
             ps_mp = self.vis.pointcloud('moving-f', self.fpoints[:, :3].cpu().numpy())
-            ps_mp.add_scalar_quantity('frame', self.fpoints[:, -1].cpu().numpy() % 2, enabled=True)
-            ps_mp.add_scalar_quantity('active', self.is_active_voxels[self.p2v].cpu().float(), enabled=True)
-            ps_mp.add_scalar_quantity('mvdist', (self.fpoints - self.ref_points).norm(p=2, dim=-1).cpu(), enabled=True)
+            self.vis.pc_scalar('moving-f', 'frame % 2',
+                               self.fpoints[:, -1].cpu().numpy() % 2,
+                               enabled=True)
+            self.vis.pc_scalar('moving-f', 'moved distance',
+                               (self.fpoints - self.ref_points).norm(p=2, dim=-1).cpu(),
+                               enabled=True)
             
             ps_mp = self.vis.pointcloud('moving-b', self.bpoints[:, :3].cpu().numpy())
-            ps_mp.add_scalar_quantity('frame', self.bpoints[:, -1].cpu().numpy() % 2, enabled=True)
-            ps_mp.add_scalar_quantity('active', self.is_active_voxels[self.p2v].cpu().float(), enabled=True)
-            ps_mp.add_scalar_quantity('mvdist', (self.bpoints - self.ref_points).norm(p=2, dim=-1).cpu(), enabled=True)
+            self.vis.pc_scalar('moving-b', 'frame % 2',
+                               self.bpoints[:, -1].cpu().numpy() % 2,
+                               enabled=True)
+            self.vis.pc_scalar('moving-b', 'moved distance',
+                               (self.bpoints - self.ref_points).norm(p=2, dim=-1).cpu(),
+                               enabled=True)
             
             ps_mv = self.vis.pointcloud('moving-voxels', self.fvoxels[:, :3].cpu().numpy(), radius=8e-4)
-            ps_mv.add_scalar_quantity('frame', self.fvoxels[:, -1].cpu().numpy() % 2, enabled=True)
-            ps_mv.add_scalar_quantity('reg loss', self.energy['reg_vec'].cpu().sqrt().numpy(), enabled=True)
+            self.vis.pc_scalar('moving-voxels', 'frame % 2',
+                               self.fvoxels[:, -1].cpu().numpy() % 2,
+                               enabled=True)
+            self.vis.pc_scalar('moving-voxels', 'reg loss',
+                               self.energy['reg_vec'].cpu().sqrt().numpy(),
+                               enabled=True)
+            vis.save('/afs/csail.mit.edu/u/x/xrhuang/public_html/arap.pth')
 
             self.construct_time += time.time()
             message = f'iter={itr}, construct={self.construct_time:.4f}, '

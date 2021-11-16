@@ -196,6 +196,8 @@ class FilterGround(object):
                                    rel_threshold=self.rel_threshold)
         res['lidar_sequence'] = seq
         end_time = time.time()
+        p1 = seq.points4d()
+        print(f'#points after filtering={p1.shape[0]}')
         if self.debug:
             vis = Visualizer(voxel_size, pc_range, size_factor=1)
             #ps_p = vis.pointcloud('original points', p0[:, :3])

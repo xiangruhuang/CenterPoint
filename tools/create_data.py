@@ -19,18 +19,20 @@ def nuscenes_data_prep(root_path, version, nsweeps=10, filter_zero=True):
         )
 
 def waymo_data_prep(root_path, split, nsweeps=1):
-    if nsweeps == -1:
-        waymo_ds.create_waymo_sequence_infos(root_path, split=split)
-    else:
-        waymo_ds.create_waymo_infos(root_path, split=split, nsweeps=nsweeps)
-    #if split == 'train': 
-    #    create_groundtruth_database(
-    #        "WAYMO",
-    #        root_path,
-    #        Path(root_path) / "infos_train_{:02d}sweeps_filter_zero_gt.pkl".format(nsweeps),
-    #        used_classes=['VEHICLE', 'CYCLIST', 'PEDESTRIAN'],
-    #        nsweeps=nsweeps
-    #    )
+    #if nsweeps == -1:
+    #    waymo_ds.create_waymo_sequence_infos(root_path, split=split)
+    #else:
+    #    waymo_ds.create_waymo_infos(root_path, split=split, nsweeps=nsweeps)
+    if split.startswith('train'): 
+        create_groundtruth_database(
+            "WAYMO",
+            root_path,
+            Path(root_path) / "infos_{}_{:02d}sweeps_filter_zero_gt.pkl".format(split, nsweeps),
+            used_classes=['VEHICLE', 'CYCLIST', 'PEDESTRIAN'],
+            db_path=Path(root_path) / f"gt_database_{split}_{nsweeps}sweeps_withvelo",
+            dbinfo_path = Path(root_path) / f"dbinfos_{split}_{nsweeps}sweeps_withvelo.pkl",
+            nsweeps=nsweeps
+        )
     
 
 if __name__ == "__main__":

@@ -100,6 +100,9 @@ def main():
     for i in range(n):
         if i % 8 != args.local_rank:
             continue
+        if i in [0]:
+            continue
+        print(f'loading seq {i}')
         data = dataset[i]
 
 if __name__ == "__main__":

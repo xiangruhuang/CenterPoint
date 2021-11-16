@@ -73,6 +73,11 @@ class Registration(object):
                     'frame % 2',
                     frame_colors[points[:, -1].long() % 2],
                     )
+                vis.pc_color(
+                    'points-before',
+                    'frame',
+                    frame_colors[points[:, -1].long()],
+                    )
                 vis.save('/afs/csail.mit.edu/u/x/xrhuang/public_html/registration.pth')
             assert False
             # register from frame i to frame i+d

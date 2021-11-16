@@ -16,7 +16,7 @@ train_pipeline = [
     dict(type="LoadPointCloudAnnotations", with_bbox=True),
     dict(type='LoadLiDARSequence', debug=True, load_temp=True),
     dict(type='FilterGround', rel_threshold=0.5, debug=False, lamb=10),
-    dict(type='TemporalVoxelization', voxel_size=[0.6, 0.6, 0.6, 1], debug=False),
+    dict(type='TemporalVoxelization', voxel_size=[0.6, 0.6, 0.6, 1], debug=True),
     #dict(type='FindConnectedComponents', radius=0.3, debug=False, granularity='points'),
     dict(type='Registration', radius=0.3, debug=True),
     #dict(type='FindMovingBoxes', debug=False),

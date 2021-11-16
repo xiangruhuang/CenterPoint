@@ -23,11 +23,11 @@ class Visualizer:
         ps.remove_all_structures()
         self.logs = []
 
-    def pc_scalar(self, pc_name, name, quantity, logging=True):
+    def pc_scalar(self, pc_name, name, quantity, enabled=False, logging=True):
         if logging:
-            self.logs.append(['pc_scalar', pc_name, name, quantity])
+            self.logs.append(['pc_scalar', pc_name, name, quantity, enabled])
         if not self.silent:
-            ps.get_point_cloud(pc_name).add_scalar_quantity(name, quantity)
+            ps.get_point_cloud(pc_name).add_scalar_quantity(name, quantity, enabled=enabled)
     
     def pc_color(self, pc_name, name, color, enabled=False, logging=True):
         if logging:
@@ -133,6 +133,7 @@ class Visualizer:
         ps.show()
     
     def save(self, path):
+        print(f'saving to {path}')
         torch.save(self.logs, path)
 
     def load(self, path):
@@ -151,7 +152,7 @@ class Visualizer:
             if log[0] == 'pc_scalar':
                 self.pc_scalar(*log[1:], logging=False)
             if log[0] == 'pc_color':
-                self.pc_scalar(*log[1:], logging=False)
+                self.pc_color(*log[1:], logging=False)
 
 class SeqVisualizer(Visualizer):
     def __init__(self,

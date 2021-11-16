@@ -189,7 +189,6 @@ class FilterGround(object):
         if self.debug:
             from det3d.core.utils.visualization import Visualizer
             p0 = seq.points4d()
-            import ipdb; ipdb.set_trace()
 
         print('filtering ground')
         ground_heights, pc_range, voxel_size = \
@@ -202,7 +201,6 @@ class FilterGround(object):
             #ps_p = vis.pointcloud('original points', p0[:, :3])
             #vis.pc_scalar('original points', 'frame % 2', p0[:, -1] % 2)
             p1 = seq.points4d()
-            import ipdb; ipdb.set_trace()
             ps_p = vis.pointcloud('points', p1[:, :3])
             ps_g = vis.heatmap('ground', ground_heights.T)
             vis.pc_scalar('points', 'frame % 2', p1[:, -1] % 2)

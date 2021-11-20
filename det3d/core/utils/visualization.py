@@ -8,7 +8,8 @@ class Visualizer:
                  pc_range,
                  size_factor=8,
                  radius=2e-4,
-                 silent=True):
+                 silent=False,
+                 logging=False):
         self.voxel_size = voxel_size
         self.pc_range = pc_range
         self.size_factor = size_factor
@@ -18,33 +19,34 @@ class Visualizer:
             ps.set_up_dir('z_up')
             ps.init()
         self.logs = []
+        self.logging = logging
 
     def clear(self):
         ps.remove_all_structures()
         self.logs = []
 
-    def pc_scalar(self, pc_name, name, quantity, enabled=False, logging=True):
-        if logging:
+    def pc_scalar(self, pc_name, name, quantity, enabled=False):
+        if self.logging:
             self.logs.append(['pc_scalar', pc_name, name, quantity, enabled])
         if not self.silent:
             ps.get_point_cloud(pc_name).add_scalar_quantity(name, quantity, enabled=enabled)
     
-    def pc_color(self, pc_name, name, color, enabled=False, logging=True):
-        if logging:
+    def pc_color(self, pc_name, name, color, enabled=False):
+        if self.logging:
             self.logs.append(['pc_color', pc_name, name, color, enabled])
         if not self.silent:
             ps.get_point_cloud(pc_name).add_color_quantity(name, color, enabled=enabled)
    
-    def curvenetwork(self, name, nodes, edges, logging=True):
-        if logging:
+    def curvenetwork(self, name, nodes, edges):
+        if self.logging:
             self.logs.append(['curvenetwork', name, nodes, edges])
         return ps.register_curve_network(name, nodes, edges, radius=self.radius)
 
-    def pointcloud(self, name, pointcloud, color=None, radius=None, logging=True):
+    def pointcloud(self, name, pointcloud, color=None, radius=None):
         """Visualize non-zero entries of heat map on 3D point cloud.
             point cloud (torch.Tensor, [N, 3])
         """
-        if logging:
+        if self.logging:
             self.logs.append(['pointcloud', name, pointcloud, color, radius])
         if radius is None:
             radius = self.radius
@@ -78,12 +80,12 @@ class Visualizer:
         corners, faces = self.get_meshes(planes[:, :3], planes[:, 6:8], planes[:, 8:14])
         return ps.register_surface_mesh(name, corners, faces)
 
-    def boxes(self, name, corners, labels=None, logging=True):
+    def boxes(self, name, corners, labels=None):
         """
             corners (shape=[N, 8, 3]):
             labels (shape=[N])
         """
-        if logging:
+        if self.logging:
             self.logs.append(['boxes', name, corners, labels])
         edges = [[0, 1], [0, 3], [0, 4], [1, 2],
                  [1, 5], [2, 3], [2, 6], [3, 7],
@@ -106,11 +108,11 @@ class Visualizer:
         return ps_box
 
     def heatmap(self, name, heatmap, color=True, threshold=0.1, radius=2e-4,
-                logging=True, **kwargs):
+                **kwargs):
         """Visualize non-zero entries of heat map on 3D point cloud.
             heatmap (torch.Tensor, [W, H])
         """
-        if logging:
+        if self.logging:
             self.logs.append(['heatmap', name, heatmap, color, threshold, radius])
         if isinstance(heatmap, np.ndarray):
             heatmap = torch.from_numpy(heatmap)

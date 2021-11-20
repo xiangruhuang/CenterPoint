@@ -207,7 +207,7 @@ class FilterGround(object):
             ps_g = vis.heatmap('ground', ground_heights.T)
             vis.pc_scalar('points', 'frame % 2', p1[:, -1] % 2)
             print(f'filter ground: time={end_time-start_time:.4f}')
-            vis.save('/afs/csail.mit.edu/u/x/xrhuang/public_html/filter_ground.pth')
-            #vis.show()
+            #vis.save('/afs/csail.mit.edu/u/x/xrhuang/public_html/filter_ground.pth')
+            vis.show()
 
         return res, info

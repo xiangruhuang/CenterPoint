@@ -93,7 +93,8 @@ class Registration(object):
                     'frame',
                     points[:, -1].long(),
                     )
-                vis.save('/afs/csail.mit.edu/u/x/xrhuang/public_html/registration.pth')
+                #vis.save('/afs/csail.mit.edu/u/x/xrhuang/public_html/registration.pth')
+                vis.show()
             
             # register from frame i to frame i+d
             self.register(points, normals, voxels, vp_edges)
@@ -118,6 +119,7 @@ class Registration(object):
                                     dim_size=num_graphs, reduce='mean')
             vis.pointcloud('graph centers', graph_centers, radius=10e-4)
             print(f'find connected components: time={end_time-start_time:.4f}')
-            vis.save('/afs/csail.mit.edu/u/x/xrhuang/public_html/registration2.pth')
+            #vis.save('/afs/csail.mit.edu/u/x/xrhuang/public_html/registration2.pth')
+            vis.show()
             #vis.show()
 

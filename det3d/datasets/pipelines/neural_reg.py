@@ -1,210 +1,144 @@
+from ..registry import PIPELINES
 import torch
 from det3d.core.utils.visualization import Visualizer
 from PytorchHashmap.torch_hash import HashTable
 import numpy as np
-from det3d.solver.learning_schedules_fastai import OneCycle
+from det3d.solver.learning_schedules_fastai import (
+    OneCycle,
+    ExponentialDecay,
+)
 import os
+from torch_cluster import fps
+from det3d.models.builder import build_neck
+from det3d.ops.primitives.primitives_cpu import voxelization
+from torch_scatter import scatter
 
-def MLP(channels, batch_norm=True):
-    module_list = []
-    for i in range(1, len(channels)):
-        module = torch.nn.Linear(channels[i-1], channels[i])
-        if batch_norm:
-            module = torch.nn.Sequential(module, torch.nn.ReLU(),
-                                         torch.nn.BatchNorm1d(channels[i]))
-        module_list.append(module)
-    return torch.nn.Sequential(*module_list)
-
-def chamfer(p, q, voxel_size):
-    p_idx, q_idx = ht.find_corres(q, p, voxel_size, 1)
-    q_idx_inv, p_idx_inv = ht.find_corres(p, q, voxel_size, -1)
-    loss = (p[p_idx, :3] - q[q_idx, :3]).square().mean()
-    loss += (p[p_idx_inv, :3] - q[q_idx_inv, :3]).square().mean()
-    return loss
-
-class NeuralReg(torch.nn.Module):
-    """ Predict flow from (x,y,z,t)
-    Args:
-        points_xyzt (torch.tensor, [N, 4]): temporal point cloud
-
-    Returns:
-        velo (torch.tensor, [N, 3]): velocity of each point
-
-    """
+@PIPELINES.register_module
+class NeuralRegistration(object):
     def __init__(self,
-                 channels = [(4, 128), (128, 128), (128, 128), (128, 128),
-                             (128, 128), (128, 128), (128, 3)],
-                 **kwargs):
-        super(NeuralReg, self).__init__(**kwargs)
-        self.layers = []
-        for i, channel in enumerate(channels):
-            if i == len(channels) - 1:
-                layer = MLP(channel, batch_norm=False)
-            else:
-                layer = MLP(channel)
-            self.layers.append(layer)
-            self.__setattr__(f'mlp{i}', self.layers[-1])
+                 flownet=None,
+                 hash_table_size=600000,
+                 voxel_size=[2.5, 2.5, 2.5, 1],
+                 grid_voxel_size=[0.3, 0.3, 0.3, 1],
+                 lr_config=None,
+                 resume=False,
+                 debug=False):
+        self.debug = debug
+        self.net = build_neck(flownet).cuda()
+        self.hash_table_size = hash_table_size
+        self.ht = HashTable(hash_table_size*2)
+        self.voxel_size = torch.tensor(voxel_size)
+        self.grid_voxel_size = torch.tensor(grid_voxel_size)
+        self.optimizer = torch.optim.Adam(self.net.parameters(), lr=1e-3)
+        self.max_iter=500
+        if lr_config is not None:
+            self.lr_scheduler = ExponentialDecay(
+                                    self.optimizer,
+                                    self.max_iter*3,
+                                    1e-3,
+                                    decay_length=100.0/(self.max_iter*3),
+                                    decay_factor=0.8,
+                                )
+            #self.lr_scheduler = torch.optim.lr_scheduler.StepLR(
+            #                    self.optimizer, step_size=200, gamma=0.8)
+            #self.lr_scheduler = OneCycle(self.optimizer, **lr_config)
+        self.window_size=5
+        self.resume=resume
 
-    def forward(self, points_xyzt):
-        points = points_xyzt
-        for layer in self.layers:
-            next_points = layer(points)
-            if next_points.shape[-1] == points.shape[-1]:
-                next_points += points
-            points = next_points
+    def chamfer(self, p, q):
+        p_idx, q_idx = self.ht.find_corres(q, p, self.voxel_size, 1)
+        q_idx_inv, p_idx_inv = self.ht.find_corres(p, q, self.voxel_size, -1)
+        loss = (p[p_idx, :3] - q[q_idx, :3]).square().mean()
+        loss += (p[p_idx_inv, :3] - q[q_idx_inv, :3]).square().mean()
+        return loss
 
-        return next_points
-
-if __name__ == '__main__':
-    net = NeuralReg()
-    net.cuda()
-    optimizer = torch.optim.Adam(net.parameters(), lr=1e-5)
-    lr_scheduler = OneCycle(optimizer, 10000, lr_max=0.001, moms=[0.95, 0.85],
-                            div_factor=10.0, pct_start=0.4)
-    import time
-    start_time = time.time()
-    seq = torch.load('seq_fg8.pt')
-    points_xyzt = torch.tensor(seq.points4d(0, 5), dtype=torch.float32).cuda()
-    from torch_cluster import fps
-    points_xyzt = points_xyzt[fps(points_xyzt, ratio=0.1)]
-    end_time = time.time()
-    print(f'loaded sequence, time={end_time-start_time}')
-    load_path = 'checkpoint1000.pt'
-    if os.path.exists(load_path):
-        print(f'loading checkpoint from {load_path}')
+    def load(self, load_path):
         checkpoint = torch.load(load_path)
         model_state_dict = checkpoint['model_state_dict']
         optimizer_state_dict = checkpoint['optimizer_state_dict']
-        #scheduler_state_dict = checkpoint['scheduler_state_dict']
-        net.load_state_dict(model_state_dict)
-        optimizer.load_state_dict(optimizer_state_dict)
-        start_itr = checkpoint['itr'] + 1
-        #min_dist = checkpoint['min_dist']
-    else:
-        start_itr = 0
-        #min_dist = torch.zeros(points_xyzt.shape[0]) + 1e10
-        # initialization
-        #for init_itr in range(10000):
-        #    optimizer.zero_grad()
-        #    rand_idx = np.random.permutation(points_xyzt.shape[0])
-        #    rand_idx = torch.tensor(rand_idx).long().cuda()
-        #    points = points_xyzt[rand_idx]
+        self.net.load_state_dict(model_state_dict)
+        self.optimizer.load_state_dict(optimizer_state_dict)
+        print(f'loaded model from {load_path}')
 
-        #    v = net(points)
-        #    loss = v.square().mean()
-        #    loss.backward()
-        #    print(f'init velocity, loss={loss:.4f}')
-        #    optimizer.step()
-        #    if loss.item() < 0.001:
-        #        break
-        #model_state_dict = net.state_dict()
-        #optimizer_state_dict = optimizer.state_dict()
-        #checkpoint = dict(model_state_dict=model_state_dict,
-        #                  optimizer_state_dict=optimizer_state_dict,
-        #                  itr=-1, min_dist=min_dist)
-        #torch.save(checkpoint, f'checkpoint_init.pt')
+    def save(self, save_path):
+        model_state_dict = self.net.state_dict()
+        optimizer_state_dict = self.optimizer.state_dict()
+        checkpoint = dict(model_state_dict=model_state_dict,
+                          optimizer_state_dict=optimizer_state_dict)
+        torch.save(checkpoint, save_path)
+        print(f'saved model to {save_path}')
 
-    ht = HashTable(points_xyzt.shape[0]*2)
-    voxel_size = torch.tensor([2.0, 2.0, 2.0, 1])
-    vis = Visualizer([], [])
-    #vis.pointcloud('points', points_xyzt[:, :3].cpu())
-    #p_idx_all, v_idx_all = ht.find_corres(points_xyzt, points_xyzt,
-    #                                      voxel_size, 1)
-    #vis.corres('all corres', points_xyzt[p_idx_all, :3].cpu(),
-    #                         points_xyzt[v_idx_all, :3].cpu())
-    #vis.show()
-    
-    for itr in range(start_itr, 10000):
-        rand_idx = np.random.permutation(points_xyzt.shape[0])[:100000]
-        rand_idx = torch.tensor(rand_idx).long().cuda()
-        #mask = (min_dist[rand_idx] < 0.1)
-        points = points_xyzt[rand_idx]
+    def neural_reg(self, points_xyzt):
+        for itr in range(self.max_iter):
+            rand_idx = torch.randperm(points_xyzt.shape[0],
+                                      dtype=torch.long,
+                                      device='cuda:0')[:100000]
+            points = points_xyzt[rand_idx]
+            
+            self.optimizer.zero_grad()
+            v = self.net(points)
+            pf = points.clone()
+            pf[:, :3] += v
+            loss_f = self.chamfer(pf, points_xyzt)
+            pb = points.clone()
+            pb[:, :3] += v
+            pb[:, -1] += 1
+            vb = -self.net(pb)
+            loss_b = (vb + v).square().mean()
+            loss = loss_f + loss_b
+            loss.backward()
+            self.optimizer.step()
+            if self.lr_scheduler is not None:
+                self.lr_scheduler.step(self.itr)
+            #lr = self.optimizer.param_groups[-1]['lr']
+            print(f'iter={self.itr}, loss_f={loss_f.item():.6f}, '\
+                  f'loss_b={loss_b.item():.6f}, lr={self.optimizer.lr:.7f}')
+            self.itr += 1
+            #if itr % 100 == 0:
+            #    frame_offset = points_xyzt[:, -1].min().long().item()
+            #    self.visualize(points_xyzt, frame_offset)
 
-        #v = net(points)
-        #p_moved = points.clone()
-        #p_moved[:, :3] += v
-        #p_idx, v_idx = ht.find_corres(points_xyzt, p_moved, voxel_size, 1)
-        #p_idx, v_idx = ht.find_corres(points_xyzt, p_moved, voxel_size, 1)
-        #valid_mask = mask[p_idx]
-        #p_idx = p_idx[valid_mask]
-        #v_idx = v_idx[valid_mask]
-        #valid_mask1 = mask[p_idx1] == False
-        #p_idx1 = p_idx1[valid_mask1]
-        #v_idx1 = v_idx1[valid_mask1]
-        #p_idx = torch.cat([p_idx, p_idx1], dim=0)
-        #v_idx = torch.cat([v_idx, v_idx1], dim=0)
-        #num_original = valid_mask1.sum().item()
-        #num_moving = valid_mask.sum().item()
+    def visualize(self, points_xyzt, frame_offset):
+        vis = Visualizer([], [])
+        for i in range(self.window_size):
+            mask = (points_xyzt[:, -1] == frame_offset+i)
+            p = points_xyzt[mask]
+            vis.pointcloud(f'p{frame_offset+i}', p[:, :3].cpu())
+            if i != self.window_size - 1:
+                v = self.net(p)
+                p_moved = (p[:, :3] + v)
+                vis.pointcloud(f'p{frame_offset+i} moved',
+                               p_moved.detach().cpu())
 
-        #p_moved[:, :3] -= 2*v
-        #p_idx, v_idx = ht.find_corres(points_xyzt, p_moved, voxel_size, -1)
-        #p_idx_inv, v_idx_inv = ht.find_corres(points_xyzt, p_moved, voxel_size, -1)
-        #valid_mask = mask[p_idx]
-        #p_idx = p_idx[valid_mask]
-        #v_idx = v_idx[valid_mask]
-        #valid_mask1 = mask[p_idx1] == False
-        #p_idx1 = p_idx1[valid_mask1]
-        #v_idx1 = v_idx1[valid_mask1]
-        #p_idx = torch.cat([p_idx, p_idx1], dim=0)
-        #v_idx = torch.cat([v_idx, v_idx1], dim=0)
-        #num_original = valid_mask1.sum().item()
-        #num_moving = valid_mask.sum().item()
+        vis.show()
+
+    def __call__(self, res, info):
+        import time
+        start_time = time.time()
+        seq = res['lidar_sequence']
+        num_frames = len(seq.frames)
+        for i in range(num_frames-self.window_size):
+            points_xyzt = seq.points4d(i, i+self.window_size)
+            points_xyzt = torch.tensor(points_xyzt, dtype=torch.float32).cuda()
+            save_path = os.path.join('work_dirs', 'motion_estimation',
+                                     f'seq_{seq.seq_id}_frame_{i}.pt')
+            if self.resume and os.path.exists(save_path):
+                self.load(save_path)
+            self.itr = 0
+            for grid_voxel_size in [[0.6, 0.6, 0.6, 1], [0.4, 0.4, 0.4, 1], [0.2, 0.2, 0.2, 1]]:
+                ev, ep = voxelization(points_xyzt.cpu(),
+                                      torch.tensor(grid_voxel_size), False
+                                      )[0].T.long().cuda()
+                num_voxels = ev.max().item()+1
+                voxels_xyzt = scatter(points_xyzt[ep], ev, dim=0,
+                                      dim_size=num_voxels, reduce='mean')
+                if voxels_xyzt.shape[0] > self.hash_table_size:
+                    rand_idx = torch.randperm(voxels_xyzt.shape[0])
+                    rand_idx = rand_idx[:self.hash_table_size].cuda()
+                    voxels_xyzt = voxels_xyzt[rand_idx]
+                self.neural_reg(voxels_xyzt)
+                self.save(save_path)
+            #self.visualize(voxels_xyzt, i)
         
-        optimizer.zero_grad()
-        v = net(points)
-        pf = points.clone()
-        pf[:, :3] += v
-        loss_f = chamfer(pf, points_xyzt, voxel_size)
-        pb = points.clone()
-        pb[:, :3] += v
-        pb[:, -1] += 1
-        vb = -net(pb)
-        loss_b = (vb + v).square().mean()
-        #pb = points.clone()
-        #pb[:, :3] += v + vb
-        #pb[:, -1] += 1
-        #loss_b = chamfer(points_xyzt, pb, voxel_size)
-        loss = loss_f + loss_b
-        #loss = (points[p_idx, :3] + v[p_idx] - points_xyzt[v_idx, :3]).square().mean()
-        #loss += (points[p_idx_inv, :3] - v[p_idx_inv] - points_xyzt[v_idx_inv, :3]).square().mean()
-        loss.backward()
-        optimizer.step()
-        lr_scheduler.step(itr)
-        print(f'iter={itr}, loss_f={loss_f.item():.6f}, loss_b={loss_b.item():.6f}, lr={optimizer.lr:.7f}')
-        #dist = (points[p_idx, :3] - points_xyzt[v_idx, :3]).norm(p=2, dim=-1).detach().cpu()
-        #min_dist[rand_idx[p_idx]] = min_dist[rand_idx[p_idx]].min(dist)
-        if itr % 100 == 0:
-            model_state_dict = net.state_dict()
-            optimizer_state_dict = optimizer.state_dict()
-            checkpoint = dict(model_state_dict=model_state_dict,
-                              optimizer_state_dict=optimizer_state_dict,
-                              itr=itr)
-            torch.save(checkpoint, f'checkpoint{itr}.pt')
-            mask0 = (points_xyzt[:, -1] == 0)
-            p0 = points_xyzt[mask0]
-            mask1 = (points_xyzt[:, -1] == 1)
-            p1 = points_xyzt[mask1]
-            mask2 = (points_xyzt[:, -1] == 2)
-            p2 = points_xyzt[mask2]
-            vis.pointcloud('p0', p0[:, :3].cpu())
-            vis.pointcloud('p1', p1[:, :3].cpu())
-            vis.pointcloud('p2', p2[:, :3].cpu())
-            v0 = net(p0)
-            p0_moved = (p0[:, :3] + v0)
-            vis.pointcloud('p0 moved', p0_moved.detach().cpu())
-            v1 = net(p1)
-            p1_moved = (p1[:, :3] + v1)
-            vis.pointcloud('p1 moved', p1_moved.detach().cpu())
-            del p0
-            del p1
-            del p2
-            del p0_moved
-            del p1_moved
-            del mask0
-            del mask1
-            del mask2
-            del v0
-            del v1
-            #vis.corres('corres', points[p_idx, :3].cpu(), points_xyzt[v_idx, :3].cpu())
-            vis.show()
-    
+        end_time = time.time()
+        print(f'Neural Registration: time={end_time-start_time:.4f}')

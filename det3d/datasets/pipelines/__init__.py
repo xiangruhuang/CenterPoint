@@ -14,6 +14,7 @@ from .filter_isolated import FilterIsolatedPoints
 from .find_moving_boxes import FindMovingBoxes
 from .visualization import Visualization
 from .registration import Registration
+from .neural_reg import NeuralRegistration
 
 __all__ = [
     "Compose",
@@ -40,4 +41,5 @@ __all__ = [
     "FindMovingBoxes",
     "Visualization",
     "Registration",
+    "NeuralRegistration",
 ]

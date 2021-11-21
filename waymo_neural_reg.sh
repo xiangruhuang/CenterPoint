@@ -5,5 +5,5 @@ mkdir -p work_dirs/motion_estimation/
 
 for i in `seq ${start} ${end}`; do
   gpu_id=$((i % 8));
-  CUDA_VISIBLE_DEVICES=${gpu_id} python tools/parallel_data_iterator.py configs/waymo/motion_mask_compuation/waymo_neural_reg.py --split ${i}
+  CUDA_VISIBLE_DEVICES=${gpu_id} python tools/parallel_data_iterator.py configs/waymo/motion_mask_compuation/waymo_neural_reg.py --split ${i} > ${i}.log 2>&1 &
 done

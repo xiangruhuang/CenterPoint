@@ -36,6 +36,12 @@ class Visualizer:
             self.logs.append(['pc_color', pc_name, name, color, enabled])
         if not self.silent:
             ps.get_point_cloud(pc_name).add_color_quantity(name, color, enabled=enabled)
+
+    def corres(self, name, src, tgt):
+        points = torch.cat([src, tgt], dim=0)
+        edges = torch.stack([torch.arange(src.shape[0]),
+                             torch.arange(tgt.shape[0]) + src.shape[0]], dim=-1)
+        return ps.register_curve_network(name, points, edges, radius=self.radius)
    
     def curvenetwork(self, name, nodes, edges):
         if self.logging:

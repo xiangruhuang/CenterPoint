@@ -51,6 +51,7 @@ class TemporalVoxelization(object):
             vis.boxes('box-original', seq.corners(), seq.classes())
             ps_v = vis.pointcloud('voxels', res['voxels'][:, :3])
             vis.pc_scalar('voxels', 'frame % 2', res['voxels'][:, -1].numpy() % 2)
+            torch.save(res['voxels'], 'voxels.pt')
 
             print(f'temporal voxelization: time={end_time-start_time:.4f}')
             #vis.save('/afs/csail.mit.edu/u/x/xrhuang/public_html/temporal_voxelization.pth')

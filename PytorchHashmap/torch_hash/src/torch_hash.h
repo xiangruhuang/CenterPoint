@@ -11,7 +11,7 @@ typedef long long int int64;
 typedef unsigned int uint32;
 typedef int64_t Key;
 typedef int64_t index_t;
-typedef double Float;
+typedef float Float;
 
 void hash_insert_gpu(at::Tensor keys, at::Tensor values,
                      at::Tensor reverse_indices, at::Tensor dims,

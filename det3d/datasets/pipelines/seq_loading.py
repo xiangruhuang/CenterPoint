@@ -12,13 +12,15 @@ class LoadLiDARSequence(object):
     def __call__(self, res, info):
         import time
         start_time = time.time()
-        if os.path.exists('/mnt/xrhuang/temp.pt') and self.load_temp:
-            seq = torch.load('/mnt/xrhuang/temp.pt')
+        seq_id = int(info['path'].split('/')[-1].split('_')[1])
+        save_path = f'/mnt/xrhuang/centerpoint/CenterPoint/{seq_id}.pt'
+        if os.path.exists(save_path) and self.load_temp:
+            seq = torch.load(save_path)
         else:
             seq = Sequence(info)
             seq.toglobal()
             if self.load_temp:
-                torch.save(seq, '/mnt/xrhuang/temp.pt')
+                torch.save(seq, save_path)
 
         res['lidar_sequence'] = seq
         end_time = time.time()

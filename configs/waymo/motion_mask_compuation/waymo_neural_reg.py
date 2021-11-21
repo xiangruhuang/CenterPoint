@@ -11,21 +11,31 @@ tasks = [
 ]
 class_names = list(itertools.chain(*[t["class_names"] for t in tasks]))
 
+flownet=dict(type='TFlowNet',
+             channels = [(4, 128), (128, 128), (128, 128), (128, 128),
+                         (128, 128), (128, 128), (128, 3)])
+
+lr_config=dict(lr_max=1e-3,
+               total_step=10000,
+               moms=[0.95, 0.85],
+               div_factor=10.0, pct_start=0.4)
+
 train_pipeline = [
     dict(type="LoadPointCloudFromFile", dataset=dataset_type),
     dict(type="LoadPointCloudAnnotations", with_bbox=True),
-    dict(type='LoadLiDARSequence', debug=False, load_temp=True),
-    dict(type='FilterGround', rel_threshold=0.5, debug=True, lamb=10),
-    dict(type='TemporalVoxelization', voxel_size=[0.6, 0.6, 0.6, 1],
-         debug=True),
+    dict(type='LoadLiDARSequence', debug=False, load_temp=False),
+    dict(type='FilterGround', rel_threshold=0.5, debug=False, lamb=10),
+    #dict(type='TemporalVoxelization', voxel_size=[0.6, 0.6, 0.6, 1],
+    #     debug=False),
     #dict(type='FindConnectedComponents', radius=0.3, debug=False, granularity='points'),
     #dict(type='Registration', radius=0.3, debug=True),
     dict(type='NeuralRegistration',
+         flownet=flownet,
          hash_table_size=500000,
          voxel_size=[2.0, 2.0, 2.0, 1],
-         lr_config=dict(lr_max=1e-3, total_step=1000, moms=[0.95, 0.85],
-                        div_factor=10.0, pct_start=0.4),
-         debug=True),
+         lr_config=lr_config,
+         resume=False,
+         debug=False),
     #dict(type='FindMovingBoxes', debug=False),
     ##dict(type='FilterIsolatedPoints', debug=True),
 ]

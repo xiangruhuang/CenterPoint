@@ -54,15 +54,16 @@ def parse_args():
     )
     parser.add_argument(
         "--split",
-        default=0,
+        default=None,
         type=int,
     )
     args = parser.parse_args()
     if "LOCAL_RANK" not in os.environ:
         os.environ["LOCAL_RANK"] = str(args.local_rank)
+    if args.split is None:
+        args.split = args.local_rank
 
     return args
-
 
 def main():
 
@@ -98,9 +99,7 @@ def main():
     dataset = build_dataset(cfg.data.train)
     n = len(dataset)
     for i in range(n):
-        if i % 8 != args.local_rank:
-            continue
-        if i in [0]:
+        if i % 16 != args.split:
             continue
         print(f'loading seq {i}')
         data = dataset[i]

@@ -45,7 +45,7 @@ class HashTable:
         for i in range(voxel_coors.shape[1]):
             insert_keys = insert_keys * self.dims[i] + voxel_coors[:, i]
             indices = indices * self.dims[i] + voxel_coors[:, i]
-            indices = (indices * self.rp0 + self.rp1) % self.rp2
+            indices = (indices * self.rp0 + self.rp1) 
 
         indices = indices % self.size
         return insert_keys.to(torch.long), indices.to(torch.long)

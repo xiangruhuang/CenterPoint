@@ -19,7 +19,6 @@ class NeuralRegistration(object):
                  flownet=None,
                  hash_table_size=600000,
                  voxel_size=[2.5, 2.5, 2.5, 1],
-                 grid_voxel_size=[0.3, 0.3, 0.3, 1],
                  lr_config=None,
                  resume=False,
                  debug=False):
@@ -28,7 +27,6 @@ class NeuralRegistration(object):
         self.hash_table_size = hash_table_size
         self.ht = HashTable(hash_table_size*2)
         self.voxel_size = torch.tensor(voxel_size)
-        self.grid_voxel_size = torch.tensor(grid_voxel_size)
         self.optimizer = torch.optim.Adam(self.net.parameters(), lr=1e-3)
         self.max_iter=500
         if lr_config is not None:
@@ -125,7 +123,9 @@ class NeuralRegistration(object):
             if self.resume and os.path.exists(save_path):
                 self.load(save_path)
             self.itr = 0
-            for grid_voxel_size in [[0.6, 0.6, 0.6, 1], [0.4, 0.4, 0.4, 1], [0.2, 0.2, 0.2, 1]]:
+            for grid_voxel_size in [[0.6, 0.6, 0.6, 1],
+                                    [0.4, 0.4, 0.4, 1],
+                                    [0.2, 0.2, 0.2, 1]]:
                 ev, ep = voxelization(points_xyzt.cpu(),
                                       torch.tensor(grid_voxel_size), False
                                       )[0].T.long().cuda()

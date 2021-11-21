@@ -23,7 +23,7 @@ lr_config=dict(lr_max=1e-3,
 train_pipeline = [
     dict(type="LoadPointCloudFromFile", dataset=dataset_type),
     dict(type="LoadPointCloudAnnotations", with_bbox=True),
-    dict(type='LoadLiDARSequence', debug=False, load_temp=True),
+    dict(type='LoadLiDARSequence', debug=False, load_temp=False),
     dict(type='FilterGround', rel_threshold=0.5, debug=False, lamb=10),
     #dict(type='TemporalVoxelization', voxel_size=[0.6, 0.6, 0.6, 1],
     #     debug=False),
@@ -35,7 +35,7 @@ train_pipeline = [
          voxel_size=[2.0, 2.0, 2.0, 1],
          lr_config=lr_config,
          resume=False,
-         debug=True),
+         debug=False),
     #dict(type='FindMovingBoxes', debug=False),
     ##dict(type='FilterIsolatedPoints', debug=True),
 ]

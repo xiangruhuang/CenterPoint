@@ -5,9 +5,13 @@ import torch
 
 @PIPELINES.register_module
 class LoadLiDARSequence(object):
-    def __init__(self, debug=False, load_temp=False):
+    def __init__(self,
+                 debug=False,
+                 load_temp=False,
+                 save_temp=False):
         self.debug = debug
         self.load_temp = load_temp
+        self.save_temp = save_temp
 
     def __call__(self, res, info):
         import time
@@ -15,11 +19,12 @@ class LoadLiDARSequence(object):
         seq_id = int(info['path'].split('/')[-1].split('_')[1])
         save_path = f'/mnt/xrhuang/centerpoint/CenterPoint/{seq_id}.pt'
         if os.path.exists(save_path) and self.load_temp:
+            print(f'loading sequence from saved dict {save_path}')
             seq = torch.load(save_path)
         else:
             seq = Sequence(info)
             seq.toglobal()
-            if self.load_temp:
+            if self.save_temp:
                 torch.save(seq, save_path)
 
         res['lidar_sequence'] = seq

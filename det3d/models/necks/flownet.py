@@ -38,8 +38,15 @@ class TFlowNet(torch.nn.Module):
             self.layers.append(layer)
             self.__setattr__(f'mlp{i}', self.layers[-1])
 
+    def set_scales(self, pmin, pmax):
+        scale = (pmax - pmin + 1e-6)
+        self.register_buffer('pmin', pmin)
+        self.register_buffer('scale', scale)
+
     def forward(self, points_xyzt):
         points = points_xyzt
+        if hasattr(self, 'pmin') and hasattr(self, 'scale'):
+            points = (points - self.pmin) / self.scale
         for layer in self.layers:
             next_points = layer(points)
             if next_points.shape[-1] == points.shape[-1]:

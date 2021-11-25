@@ -65,6 +65,15 @@ class Sequence:
             corners.append(f.corners)
         corners = np.concatenate(corners, axis=0)
         return corners
+
+    def velocity(self, start_frame=0, end_frame=-1):
+        velocity = []
+        if end_frame == -1:
+            end_frame = len(self.frames)
+        for f in self.frames[start_frame:end_frame]:
+            velocity.append(f.velocity/f.vweight)
+        velocity = np.concatenate(velocity, axis=0)
+        return velocity
     
     def classes(self, start_frame=0, end_frame=-1):
         classes = []

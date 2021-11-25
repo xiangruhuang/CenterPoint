@@ -15,7 +15,7 @@ flownet=dict(type='TFlowNet',
              channels = [(4, 128), (128, 128), (128, 128), (128, 128),
                          (128, 128), (128, 128), (128, 3)])
 
-lr_config=dict(lr_max=1e-3,
+lr_config=dict(lr_max=1e-4,
                total_step=10000,
                moms=[0.95, 0.85],
                div_factor=10.0, pct_start=0.4)
@@ -32,7 +32,8 @@ train_pipeline = [
     dict(type='NeuralRegistration',
          flownet=flownet,
          hash_table_size=500000,
-         voxel_size=[2.0, 2.0, 2.0, 1],
+         voxel_size=[2.5, 2.5, 2.5, 1],
+         window_size=5,
          lr_config=lr_config,
          resume=False,
          debug=False),

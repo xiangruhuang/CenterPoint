@@ -42,13 +42,19 @@ class Visualizer:
         edges = torch.stack([torch.arange(src.shape[0]),
                              torch.arange(tgt.shape[0]) + src.shape[0]], dim=-1)
         return ps.register_curve_network(name, points, edges, radius=self.radius)
+
+    def trace(self, name, points, **kwargs):
+        num_points = points.shape[0]
+        edges = torch.stack([torch.arange(num_points-1),
+                             torch.arange(num_points-1)+1], dim=-1)
+        return ps.register_curve_network(name, points, edges, **kwargs)
    
     def curvenetwork(self, name, nodes, edges):
         if self.logging:
             self.logs.append(['curvenetwork', name, nodes, edges])
         return ps.register_curve_network(name, nodes, edges, radius=self.radius)
 
-    def pointcloud(self, name, pointcloud, color=None, radius=None):
+    def pointcloud(self, name, pointcloud, color=None, radius=None, **kwargs):
         """Visualize non-zero entries of heat map on 3D point cloud.
             point cloud (torch.Tensor, [N, 3])
         """
@@ -57,10 +63,10 @@ class Visualizer:
         if radius is None:
             radius = self.radius
         if color is None:
-            return ps.register_point_cloud(name, pointcloud, radius=self.radius)
+            return ps.register_point_cloud(name, pointcloud, radius=radius, **kwargs)
         else:
             return ps.register_point_cloud(
-                name, pointcloud, radius=self.radius, color=color
+                name, pointcloud, radius=radius, color=color, **kwargs
                 )
     
     def get_meshes(self, centers, eigvals, eigvecs):

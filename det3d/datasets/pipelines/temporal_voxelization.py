@@ -21,9 +21,10 @@ class TemporalVoxelization(object):
         voxels (V, 4): (x,y,z,t) 4D voxels
         vp_edges (2, E): (voxel, point) edges
     """
-    def __init__(self, voxel_size, debug=False):
+    def __init__(self, voxel_size, velocity=False, debug=False):
         self.voxel_size = voxel_size
         self.debug=debug
+        self.velocity = velocity
     
     def __call__(self, res, info):
         import time
@@ -33,15 +34,23 @@ class TemporalVoxelization(object):
         voxel_size = torch.tensor(self.voxel_size, dtype=torch.float32)
         points, normals = seq.points4d(), seq.normals()
         points = torch.tensor(points, dtype=torch.float32)
-        normals = torch.tensor(normals, dtype=torch.float32)
-        res['points'] = points
-        res['normals'] = normals 
+        #normals = torch.tensor(normals, dtype=torch.float32)
+        #res['points'] = points
+        #res['normals'] = normals 
         
         vp_edges = voxelization(points, voxel_size, False)[0].T.long()
         num_voxels = vp_edges[0].max() + 1
         res['vp_edges'] = vp_edges
         res['voxels'] = scatter(points[vp_edges[1]], vp_edges[0],
                                 reduce='mean', dim=0, dim_size=num_voxels)
+        if self.velocity:
+            velocity = seq.velocity()
+            velocity = torch.tensor(velocity, dtype=torch.float32)
+            ev, ep = vp_edges
+            voxels_velo = scatter(velocity[ep], ev, dim=0,
+                                  dim_size=num_voxels, reduce='mean')
+            res['voxels_velo'] = voxels_velo
+
         end_time = time.time()
         if self.debug:
             from det3d.core.utils.visualization import Visualizer

@@ -19,6 +19,7 @@ class NeuralRegistration(object):
                  flownet=None,
                  hash_table_size=600000,
                  voxel_size=[2.5, 2.5, 2.5, 1],
+                 window_size=5,
                  lr_config=None,
                  resume=False,
                  debug=False):
@@ -40,7 +41,7 @@ class NeuralRegistration(object):
             #self.lr_scheduler = torch.optim.lr_scheduler.StepLR(
             #                    self.optimizer, step_size=200, gamma=0.8)
             #self.lr_scheduler = OneCycle(self.optimizer, **lr_config)
-        self.window_size=5
+        self.window_size=window_size
         self.resume=resume
 
     def chamfer(self, p, q):
@@ -88,13 +89,9 @@ class NeuralRegistration(object):
             self.optimizer.step()
             if self.lr_scheduler is not None:
                 self.lr_scheduler.step(self.itr)
-            #lr = self.optimizer.param_groups[-1]['lr']
             print(f'iter={self.itr}, loss_f={loss_f.item():.6f}, '\
                   f'loss_b={loss_b.item():.6f}, lr={self.optimizer.lr:.7f}')
             self.itr += 1
-            #if itr % 100 == 0:
-            #    frame_offset = points_xyzt[:, -1].min().long().item()
-            #    self.visualize(points_xyzt, frame_offset)
 
     def visualize(self, points_xyzt, frame_offset):
         vis = Visualizer([], [])
@@ -115,6 +112,10 @@ class NeuralRegistration(object):
         start_time = time.time()
         seq = res['lidar_sequence']
         num_frames = len(seq.frames)
+        points_all = seq.points4d()
+        pmax = torch.tensor(points_all.max(0)).float().cuda()
+        pmin = torch.tensor(points_all.min(0)).float().cuda()
+        self.net.set_scales(pmin, pmax)
         for i in range(num_frames-self.window_size):
             points_xyzt = seq.points4d(i, i+self.window_size)
             points_xyzt = torch.tensor(points_xyzt, dtype=torch.float32).cuda()
@@ -138,7 +139,6 @@ class NeuralRegistration(object):
                     voxels_xyzt = voxels_xyzt[rand_idx]
                 self.neural_reg(voxels_xyzt)
                 self.save(save_path)
-            #self.visualize(voxels_xyzt, i)
         
         end_time = time.time()
         print(f'Neural Registration: time={end_time-start_time:.4f}')

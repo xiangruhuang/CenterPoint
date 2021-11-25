@@ -1,7 +1,6 @@
 from .compose import Compose
 from .formating import Reformat
 
-# from .loading import LoadAnnotations, LoadImageFromFile, LoadProposals
 from .loading import *
 from .test_aug import DoubleFlip
 from .preprocess import Preprocess, Voxelization
@@ -15,6 +14,9 @@ from .find_moving_boxes import FindMovingBoxes
 from .visualization import Visualization
 from .registration import Registration
 from .neural_reg import NeuralRegistration
+from .regresult_loading import LoadNeuralRegResult 
+from .obj_tracking import ObjTracking
+from .motion_clustering import MotionClustering
 
 __all__ = [
     "Compose",
@@ -42,4 +44,7 @@ __all__ = [
     "Visualization",
     "Registration",
     "NeuralRegistration",
+    "LoadNeuralRegResult",
+    "ObjTracking",
+    "MotionClustering",
 ]

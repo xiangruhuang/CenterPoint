@@ -142,3 +142,5 @@ class NeuralRegistration(object):
         
         end_time = time.time()
         print(f'Neural Registration: time={end_time-start_time:.4f}')
+
+        return res, info

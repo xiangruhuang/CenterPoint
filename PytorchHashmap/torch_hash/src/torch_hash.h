@@ -22,4 +22,9 @@ void correspondence(at::Tensor keys, at::Tensor values, at::Tensor reverse_indic
                     at::Tensor dims, at::Tensor query_keys, at::Tensor query_values,
                     at::Tensor qmin, at::Tensor qmax, at::Tensor corres_indices);
 
+void voxel_graph_gpu(at::Tensor keys, at::Tensor values, at::Tensor reverse_indices,
+                     at::Tensor dims, at::Tensor query_keys, at::Tensor query_values,
+                     at::Tensor qmin, at::Tensor qmax, int max_num_neighbors,
+                     Float radius, at::Tensor corres_indices);
+
 #endif

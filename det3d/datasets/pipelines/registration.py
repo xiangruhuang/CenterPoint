@@ -16,9 +16,13 @@ from det3d.solver.arap import MultiFrameARAP as Solver
 
 @PIPELINES.register_module
 class Registration(object):
-    def __init__(self, radius, debug=False):
-        self.debug = debug
+    def __init__(self,
+                 radius,
+                 voxel_size=[2.5, 2.5, 2.5, 1],
+                 debug=False):
         self.radius = radius
+        self.voxel_size = torch.tensor(voxel_size, dtype=torch.float32)
+        self.debug = debug
 
     def register(self, points, normals, voxels, vp_edges,
                  voxel_size=[0.6, 0.6, 0.6, 1]):
@@ -39,7 +43,9 @@ class Registration(object):
     def __call__(self, res, info):
         # initialization
         seq = res['lidar_sequence']
+        seq = torch.load('reg1.pt')
         num_frames = len(seq.frames)
+
         frame_window_size = 5
         points4d = res['points']
         normals4d = res['normals']

@@ -28,18 +28,21 @@ class KalmanFilter:
     def predict(self):
         # Ref :Eq.(9) and Eq.(10)
         # Update time state
-        self.x = np.dot(self.A, self.x) # + np.dot(self.B, self.u)
+        self.x = self.A @ self.x # + np.dot(self.B, self.u)
         # Calculate error covariance
         # P= A*P*A' + Q
-        self.P = np.dot(np.dot(self.A, self.P), self.A.T) + self.Q
+        self.P = (self.A @ self.P) @ self.A.T + self.Q
+
+        return self.x[:3]
 
     def update(self, z):
         # Ref :Eq.(11) , Eq.(11) and Eq.(13)
         # S = H*P*H'+R
-        S = np.dot(self.H, np.dot(self.P, self.H.T)) + self.R
+        S = self.H @ (self.P @ self.H.T) + self.R
         # Calculate the Kalman Gain
         # K = P * H'* inv(H*P*H'+R)
-        K = np.dot(np.dot(self.P, self.H.T), np.linalg.inv(S))  # Eq.(11)
-        self.x = np.round(self.x + np.dot(K, (z - np.dot(self.H, self.x))))  # Eq.(12)
-        I = np.eye(self.H.shape[1])
-        self.P = (I - (K * self.H)) * self.P  # Eq.(13)
+        K = (self.P @ self.H.T) @ S.inverse()  # Eq.(11)
+        self.x = self.x + K @ (z - (self.H @ self.x))  # Eq.(12)
+        I = torch.eye(self.H.shape[1])
+        #self.P = (I - (K * self.H)) * self.P  # Eq.(13)
+        self.P = (I - K @ self.H) @ self.P  # Eq.(13)

@@ -141,6 +141,72 @@ __global__ void correspondence_kernel(
   }
 }
 
+__global__ void voxel_graph_kernel(
+                  Key* ht_keys, // hash table keys, values
+                  Float* ht_values,
+                  Key* reverse_indices, // indices to original hashed array
+                  index_t ht_size, // hashtable size
+                  const Key* dims, // maximum size of each dimension
+                  int num_dim, // number of dimensions
+                  Key* query_keys, // query keys in shape [N, D]
+                  const Float* query_values, // query values
+                  uint32 num_queries, //
+                  const int* qmin, const int* qmax, // query range in each dimension
+                  const int max_num_neighbors, const Float radius,
+                  Key* corres_indices // correspondence results
+                  ) {
+  unsigned int threadid = blockIdx.x*blockDim.x + threadIdx.x;
+  if (threadid < num_queries) {
+    Key* query_key_ptr = &query_keys[threadid*num_dim];
+    
+    int num_neighbors = 0;
+    // number of voxels to query
+    int num_combination = 1;
+    for (int i = 0; i < num_dim; i++) {
+      num_combination *= (qmax[i] - qmin[i] + 1);
+    }
+    for (int i = 0; i < max_num_neighbors; i++) {
+      corres_indices[threadid*max_num_neighbors+i] = -1;
+    }
+
+    // enumerate all directions
+    Float dist, di;
+    Float radius2 = radius*radius;
+    for (int c = 0; c < num_combination; c++) {
+      int temp = c;
+      for (int i = 0; i < num_dim; i++) {
+        query_key_ptr[i] += temp % (qmax[i] - qmin[i] + 1) + qmin[i];
+        temp /= (qmax[i] - qmin[i] + 1);
+      }
+      Key query_key = map2key(query_key_ptr, dims, num_dim);
+      index_t hash_idx = hashkey(query_key, ht_size);
+      const Float* query_value = &query_values[threadid*num_dim];
+      while (ht_keys[hash_idx] != -1) {
+        if (ht_keys[hash_idx] == query_key) {
+          const Float* ht_value = &ht_values[hash_idx*num_dim];
+          // calculate distance
+          dist = 0.0;
+          for (int i = 0; i < 3; i++) {
+            di = ht_value[i] - query_value[i];
+            dist = dist + di*di;
+          }
+          if ((dist < radius2) && (num_neighbors < max_num_neighbors)) {
+            int nid = threadid*max_num_neighbors+num_neighbors;
+            num_neighbors++;
+            corres_indices[nid] = reverse_indices[hash_idx];
+          }
+        }
+        hash_idx = (hash_idx + 1) % ht_size;
+      }
+      temp = c;
+      for (int i = 0; i < num_dim; i++) {
+        query_key_ptr[i] -= temp % (qmax[i] - qmin[i] + 1) + qmin[i];
+        temp /= (qmax[i] - qmin[i] + 1);
+      }
+    }
+  }
+}
+
 void hash_insert_gpu(at::Tensor keys, at::Tensor values,
                      at::Tensor reverse_indices, at::Tensor dims,
                      at::Tensor insert_keys, at::Tensor insert_values
@@ -212,6 +278,51 @@ void correspondence(at::Tensor keys, at::Tensor values, at::Tensor reverse_indic
     query_key_data, query_value_data,
     num_queries,
     qmin_data, qmax_data,
+    corres_index_data
+  );
+  
+}
+
+void voxel_graph_gpu(at::Tensor keys, at::Tensor values, at::Tensor reverse_indices,
+                     at::Tensor dims, at::Tensor query_keys, at::Tensor query_values,
+                     at::Tensor qmin, at::Tensor qmax,
+                     int max_num_neighbors, Float radius,
+                     at::Tensor corres_indices) {
+  CHECK_INPUT(keys);
+  CHECK_INPUT(values);
+  CHECK_INPUT(dims);
+  CHECK_INPUT(query_keys);
+  CHECK_INPUT(query_values);
+  CHECK_INPUT(qmin);
+  CHECK_INPUT(qmax);
+  CHECK_INPUT(corres_indices);
+
+  Key* key_data = keys.data<Key>();
+  Key* reverse_index_data = reverse_indices.data<Key>();
+  int num_dim = query_values.size(1);
+  Key* query_key_data = query_keys.data<Key>();
+  Float* value_data = values.data<Float>();
+  const Float* query_value_data = query_values.data<Float>();
+  index_t ht_size = keys.size(0);
+  uint32 num_queries = query_keys.size(0);
+  const int* qmin_data = qmin.data<int>();
+  const int* qmax_data = qmax.data<int>();
+  const Key* dims_data = dims.data<Key>();
+
+  Key* corres_index_data = corres_indices.data<Key>();
+
+  int mingridsize, threadblocksize;
+  cudaOccupancyMaxPotentialBlockSize(&mingridsize, &threadblocksize,
+     correspondence_kernel, 0, 0);
+
+  uint32 gridsize = (num_queries + threadblocksize - 1) / threadblocksize;
+  voxel_graph_kernel<<<gridsize, threadblocksize>>>(
+    key_data, value_data, reverse_index_data, 
+    ht_size, dims_data, num_dim, 
+    query_key_data, query_value_data,
+    num_queries,
+    qmin_data, qmax_data,
+    max_num_neighbors, radius,
     corres_index_data
   );
   

@@ -35,6 +35,17 @@ class Sequence:
         for frame in self.frames[start_frame:end_frame]:
             traj.append(frame.camera_loc)
 
+    def points(self, start_frame=0, end_frame=-1):
+        points = []
+        if end_frame == -1:
+            end_frame = len(self.frames)
+        for f in self.frames[start_frame:end_frame]:
+            s = f.points
+            frame_id = np.ones((s.shape[0], 1)) * f.frame_id
+            s = np.concatenate([s, frame_id], axis=-1)
+            points.append(s)
+        return points
+
     def points4d(self, start_frame=0, end_frame=-1):
         points = []
         if end_frame == -1:

@@ -15,8 +15,8 @@ flownet=dict(type='TFlowNet',
              channels = [(4, 128), (128, 128), (128, 128), (128, 128),
                          (128, 128), (128, 128), (128, 3)])
 
-kf_config=dict(dt=1.0/30,
-               std_acc=0.1,
+kf_config=dict(dt=1.0/15,
+               std_acc=1.0,
                std_meas=1.0)
 
 train_pipeline = [
@@ -35,10 +35,10 @@ train_pipeline = [
     #dict(type='MotionClustering',
     #     voxel_size=[1.,1.,1.,1],
     #     dv_threshold=0.05,
-    #     dp_threshold=2.0),
+    #     dp_threshold=1.5),
     dict(type='ObjTracking',
          kf_config=kf_config,
-         threshold=1,
+         threshold=0.5,
          acc_threshold=0.5,
          reg_threshold=1.0,
          angle_threshold=40.0,

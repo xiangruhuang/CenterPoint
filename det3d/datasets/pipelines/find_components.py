@@ -28,9 +28,18 @@ class FindConnectedComponents(object):
         import time
         start_time = time.time()
         if self.granularity == 'voxels':
-            nodes = res['voxels']
+            if res.get('voxels', None) is None:
+                raise ValueError('voxels not present in res,'\
+                                 'use TemporalVoxelization First')
+            else:
+                nodes = res['voxels']
         else:
-            nodes = res['points']
+            if res.get('points', None) is not None:
+                nodes = res['points']
+            else:
+                seq = res['lidar_sequence']
+                nodes = seq.points4d()
+                nodes = torch.tensor(nodes, dtype=torch.float32)
         e0, e1 = voxel_graph(nodes, nodes, self.voxel_size.float().cpu(),
                              0, self.max_num_neighbors).T.long()
         dist = (nodes[e0, :3] - nodes[e1, :3]).norm(p=2, dim=-1)
@@ -48,7 +57,8 @@ class FindConnectedComponents(object):
             gp_edges = torch.stack([graph_idx, vp_edges[1]],
                                    dim=0).long()
         else:
-            gp_edges = torch.stack([graph_idx, torch.arange(graph_idx.shape[0])],
+            gp_edges = torch.stack([graph_idx,
+                                    torch.arange(graph_idx.shape[0])],
                                    dim=0).long()
 
         res['gp_edges'] = gp_edges
@@ -57,18 +67,29 @@ class FindConnectedComponents(object):
         if self.debug:
             from det3d.core.utils.visualization import Visualizer
             vis = Visualizer([], [])
-            points = res['points'][gp_edges[1]]
             seq = res['lidar_sequence']
+            points = torch.tensor(seq.points4d(), dtype=torch.float32)
+            import ipdb; ipdb.set_trace()
+            points = points[gp_edges[1]]
             colors = torch.randn(num_graphs, 3)
             frame_colors = torch.randn(len(seq.frames), 3)
             ps_p = vis.pointcloud('points', points[:, :3])
-            ps_p.add_color_quantity('frame', frame_colors[points[:, -1].long()], enabled=True)
+            ps_p.add_color_quantity('frame', frame_colors[points[:, -1].long()],
+                                    enabled=True)
             ps_p.add_color_quantity('graph', colors[gp_edges[0]], enabled=True)
+            mask0 = (points[:, -1] == 0)
+            mask1 = (points[:, -1] == 1)
+            p0, p1 = points[mask0], points[mask1]
+            ps_p0 = vis.pointcloud('p0', p0[:, :3])
+            ps_p1 = vis.pointcloud('p1', p1[:, :3])
+            ps_p0.add_color_quantity('graph', colors[gp_edges[0]][mask0],
+                                     enabled=True)
+            ps_p1.add_color_quantity('graph', colors[gp_edges[0]][mask1],
+                                     enabled=True)
             graph_centers = scatter(points[:, :3], gp_edges[0], dim=0,
                                     dim_size=num_graphs, reduce='mean')
             vis.pointcloud('graph centers', graph_centers, radius=10e-4)
             print(f'find connected components: time={end_time-start_time:.4f}')
-            import ipdb; ipdb.set_trace()
             vis.show()
 
         return res, info

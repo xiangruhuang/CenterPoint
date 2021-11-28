@@ -16,7 +16,7 @@ class MotionClustering(object):
         self.dp_threshold = dp_threshold
 
     def find_clusters(self, voxels, voxels_velo):
-        e0, e1 = voxel_graph(voxels, voxels, self.voxel_size, 0, 32).T.long()
+        e0, e1 = voxel_graph(voxels, voxels, self.voxel_size, 0, 64).T.long()
         dv = (voxels_velo[e0] - voxels_velo[e1]).norm(p=2, dim=-1)
         dp = (voxels[e0] - voxels[e1]).norm(p=2, dim=-1)
         mask = (dv < self.dv_threshold) & (dp < self.dp_threshold)

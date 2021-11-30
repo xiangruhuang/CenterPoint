@@ -131,7 +131,8 @@ class HashTable:
         points = ref_points #torch.cat([ref_points, query_points], dim=0)
         voxel_coors = torch.round((points-pc_range[:4]) / voxel_size
                                  ).long() + 1
-        self.dims = (voxel_coors.max(0)[0] - voxel_coors.min(0)[0]) + 3
+        
+        self.dims = ((pc_range[4:] - pc_range[:4]) / voxel_size).long() + 3
         
         self.keys[:] = -1
         # hash points into hash table

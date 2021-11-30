@@ -8,8 +8,7 @@ class Visualizer:
                  pc_range,
                  size_factor=8,
                  radius=2e-4,
-                 silent=False,
-                 logging=False):
+                 silent=False):
         self.voxel_size = voxel_size
         self.pc_range = pc_range
         self.size_factor = size_factor
@@ -19,21 +18,16 @@ class Visualizer:
             ps.set_up_dir('z_up')
             ps.init()
         self.logs = []
-        self.logging = logging
 
     def clear(self):
         ps.remove_all_structures()
         self.logs = []
 
     def pc_scalar(self, pc_name, name, quantity, enabled=False):
-        if self.logging:
-            self.logs.append(['pc_scalar', pc_name, name, quantity, enabled])
         if not self.silent:
             ps.get_point_cloud(pc_name).add_scalar_quantity(name, quantity, enabled=enabled)
     
     def pc_color(self, pc_name, name, color, enabled=False):
-        if self.logging:
-            self.logs.append(['pc_color', pc_name, name, color, enabled])
         if not self.silent:
             ps.get_point_cloud(pc_name).add_color_quantity(name, color, enabled=enabled)
 
@@ -50,16 +44,12 @@ class Visualizer:
         return ps.register_curve_network(name, points, edges, **kwargs)
    
     def curvenetwork(self, name, nodes, edges):
-        if self.logging:
-            self.logs.append(['curvenetwork', name, nodes, edges])
         return ps.register_curve_network(name, nodes, edges, radius=self.radius)
 
     def pointcloud(self, name, pointcloud, color=None, radius=None, **kwargs):
         """Visualize non-zero entries of heat map on 3D point cloud.
             point cloud (torch.Tensor, [N, 3])
         """
-        if self.logging:
-            self.logs.append(['pointcloud', name, pointcloud, color, radius])
         if radius is None:
             radius = self.radius
         if color is None:
@@ -92,13 +82,11 @@ class Visualizer:
         corners, faces = self.get_meshes(planes[:, :3], planes[:, 6:8], planes[:, 8:14])
         return ps.register_surface_mesh(name, corners, faces)
 
-    def boxes(self, name, corners, labels=None):
+    def boxes(self, name, corners, labels=None, **kwargs):
         """
             corners (shape=[N, 8, 3]):
             labels (shape=[N])
         """
-        if self.logging:
-            self.logs.append(['boxes', name, corners, labels])
         edges = [[0, 1], [0, 3], [0, 4], [1, 2],
                  [1, 5], [2, 3], [2, 6], [3, 7],
                  [4, 5], [4, 7], [5, 6], [6, 7]]
@@ -109,7 +97,7 @@ class Visualizer:
         edges = edges + offset
         ps_box = ps.register_curve_network(
                      name, corners.reshape(-1, 3),
-                     edges.reshape(-1, 2), radius=2e-4
+                     edges.reshape(-1, 2), radius=2e-4, **kwargs
                  )
         if labels is not None:
             # R->Car, G->Ped, B->Cyc
@@ -124,8 +112,6 @@ class Visualizer:
         """Visualize non-zero entries of heat map on 3D point cloud.
             heatmap (torch.Tensor, [W, H])
         """
-        if self.logging:
-            self.logs.append(['heatmap', name, heatmap, color, threshold, radius])
         if isinstance(heatmap, np.ndarray):
             heatmap = torch.from_numpy(heatmap)
         indices = list(torch.where(heatmap > threshold))
@@ -145,28 +131,6 @@ class Visualizer:
         ps.set_up_dir('z_up')
         ps.init()
         ps.show()
-    
-    def save(self, path):
-        print(f'saving to {path}')
-        torch.save(self.logs, path)
-
-    def load(self, path):
-        ps.remove_all_structures()
-        self.logs = torch.load(path)
-        for log in self.logs:
-            print(log[0])
-            if log[0] == 'heatmap':
-                self.heatmap(*log[1:], logging=False)
-            if log[0] == 'pointcloud':
-                self.pointcloud(*log[1:], logging=False)
-            if log[0] == 'curvenetwork':
-                self.curvenetwork(*log[1:], logging=False)
-            if log[0] == 'boxes':
-                self.boxes(*log[1:], logging=False)
-            if log[0] == 'pc_scalar':
-                self.pc_scalar(*log[1:], logging=False)
-            if log[0] == 'pc_color':
-                self.pc_color(*log[1:], logging=False)
 
 class SeqVisualizer(Visualizer):
     def __init__(self,

@@ -13,6 +13,7 @@ from PytorchHashmap.torch_hash import HashTable
 from .kalman_filter import KalmanFilter
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import connected_components
+import glob
 
 @PIPELINES.register_module
 class ObjTracking(object):
@@ -279,9 +280,9 @@ class ObjTracking(object):
         graph_idx_by_point = scatter(torch.tensor(graph_idx[ev]).long(), ep,
                                      dim=0, reduce='max',
                                      dim_size=points.shape[0])
-
         t0 = time.time()
         trace_count = 0
+
         for i in range(num_graphs):
             indices = torch.where((graph_idx_by_point == i) & (is_cropped == False))[0]
             if indices.shape[0] == 0:
@@ -353,76 +354,13 @@ class ObjTracking(object):
                 #    print(e)
                 #    import ipdb; ipdb.set_trace()
                 #    pass
-            
-        return voxel_weight, voxel_dr
-
-    def find_trace(self, voxels, voxel_weight, voxel_dr, seq,
-                   vp_edges, threshold=0.1):
-        points = torch.tensor(seq.points4d(), dtype=torch.float32)
-        ev, ep = vp_edges
-        point_weight = torch.zeros(points.shape[0])
-        point_dr = torch.zeros(points.shape[0], 3)
-        point_weight[ep] = voxel_weight[ev]
-        point_dr[ep] = voxel_dr[ev]
-        vis = Visualizer([], [])
-        #ps_vall = vis.pointcloud('points-all', points[:, :3])
-        mask = (point_weight > threshold)
-        points = points[mask]
-        num_points = points.shape[0]
-        point_dr = point_dr[mask]
-        point_weight = point_weight[mask]
-
-        ps_v = vis.pointcloud('points', points[:, :3])
-        ps_v.add_scalar_quantity('frame', points[:, -1])
-        vis.boxes('box', seq.corners(), seq.classes())
-        points_velo = point_dr / point_weight.unsqueeze(-1)
-        ps_v.add_scalar_quantity('point weight', point_weight)
-        ps_v.add_vector_quantity('point dr', points_velo,
-                                 radius=2e-4, length=3e-3, enabled=True)
-        points_gpu = points.cuda()
-        corres=self.ht.voxel_graph(points_gpu, points_gpu,
-                                   self.voxel_size.cuda(), 0, radius=0.5,
-                                   max_num_neighbors=64)
-        corres_f=self.ht.voxel_graph(points_gpu, points_gpu,
-                                     self.voxel_size.cuda(), 1, radius=2.5,
-                                     max_num_neighbors=64)
-        corres = torch.cat([corres, corres_f], dim=1).cpu()
-        d1 = (points[corres[0], :3] - points[corres[1], :3]).norm(p=2, dim=-1)
-        d2 = (points_velo[corres[0]] - points_velo[corres[1]]).norm(p=2, dim=-1)
-        mask = (d2 < 0.3)
-        c0, c1 = corres[:, mask].cpu().long()
-        A = csr_matrix((torch.ones_like(c0), (c0, c1)),
-                       shape=(num_points, num_points))
-        num_graphs, graph_idx = connected_components(A, directed=False)
-        colors = torch.randn(num_graphs, 3)
-        ps_v.add_color_quantity('graph', colors[graph_idx], enabled=True)
-        start_frame, end_frame = 0, 20
-        vis.boxes('box sub', seq.corners(start_frame, end_frame),
-                             seq.classes(start_frame, end_frame))
-        #vis.curvenetwork('edges', points[:, :3], corres[:, mask].T)
-        vis.show()
-        import ipdb; ipdb.set_trace()
-
-        for i in range(num_graphs):
-            indices = torch.where(graph_idx == i)[0]
-            if indices.shape[0] < 100:
-                continue
 
     def __call__(self, res, info):
-        res = torch.load('obj_tracking.pt')
         seq = res['lidar_sequence']
         voxels, voxels_velo = res['voxels'], res['voxels_velo']
         ev, ep = res['vp_edges']
         num_graphs, graph_idx = res['num_graphs'], res['graph_idx']
-        if True:
-            voxel_weight, voxel_dr = self.motion_sync(voxels, voxels_velo,
-                                                      num_graphs, graph_idx,
-                                                      res['vp_edges'], seq)
-        else:
-            trace_dict = torch.load('motion_sync.pt')
-            voxel_weight = trace_dict['voxel_weight']
-            voxel_dr = trace_dict['voxel_dr']
-        vp_edges = res['vp_edges']
-        self.find_trace(voxels, voxel_weight, voxel_dr, seq, vp_edges)
+        self.motion_sync(voxels, voxels_velo, num_graphs,
+                         graph_idx, res['vp_edges'], seq)
         
         return res, info 

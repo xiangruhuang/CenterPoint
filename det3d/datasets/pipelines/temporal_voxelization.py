@@ -55,12 +55,13 @@ class TemporalVoxelization(object):
         if self.debug:
             from det3d.core.utils.visualization import Visualizer
             vis = Visualizer([], [])
-            ps_p = vis.pointcloud('points', res['points'][:, :3])
-            vis.pc_scalar('points', 'frame % 2', res['points'][:, -1].numpy() % 2)
+            #ps_p = vis.pointcloud('points', res['points'][:, :3])
+            #vis.pc_scalar('points', 'frame % 2', res['points'][:, -1].numpy() % 2)
             vis.boxes('box-original', seq.corners(), seq.classes())
             ps_v = vis.pointcloud('voxels', res['voxels'][:, :3])
-            vis.pc_scalar('voxels', 'frame % 2', res['voxels'][:, -1].numpy() % 2)
-            torch.save(res['voxels'], 'voxels.pt')
+            ps_v.add_scalar_quantity('frame % 2', res['voxels'][:, -1].numpy() % 2)
+            #vis.pc_scalar('voxels', 'frame % 2', res['voxels'][:, -1].numpy() % 2)
+            #torch.save(res['voxels'], 'voxels.pt')
 
             print(f'temporal voxelization: time={end_time-start_time:.4f}')
             #vis.save('/afs/csail.mit.edu/u/x/xrhuang/public_html/temporal_voxelization.pth')

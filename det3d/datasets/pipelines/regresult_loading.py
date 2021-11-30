@@ -25,43 +25,47 @@ class LoadNeuralRegResult(object):
         import time
         start_time = time.time()
         seq_id = int(info['path'].split('/')[-1].split('_')[1])
-        if self.load_temp and os.path.exists(f'reg_res{seq_id}.pt'):
-            print(f'loading from reg_res{seq_id}.pt')
-            seq=torch.load(f'reg_res{seq_id}.pt')
-            #####BUGGGGGGGGGGG#
-            seq.frames.pop()
-            ######
-            res['lidar_sequence'] = seq
-            if self.debug:
-                vis = Visualizer([], [])
-                center = torch.tensor(points.mean(0)[:3])
-                camera = center.clone()
-                camera[0] -= 10
-                vis.look_at_dir(center, camera, (0,0,1))
-                points = seq.points4d()
-                ps_p = vis.pointcloud('points', points[:, :3])
-                ps_p.add_scalar_quantity('frame % 2', points[:, -1] % 2)
-                ps_p.add_scalar_quantity('frame', points[:, -1])
-                velocity = seq.velocity()
-                velocity = torch.tensor(velocity)
-                vnorm = velocity.norm(p=2, dim=-1)
-                ps_p.add_scalar_quantity('v-norm >  5 cm', vnorm > 0.05)
-                ps_p.add_scalar_quantity('v-norm > 10 cm', vnorm > 0.1)
-                ps_p.add_scalar_quantity('v-norm > 15 cm', vnorm > 0.15)
-                ps_p.add_scalar_quantity('v-norm', vnorm)
-                colors = torch.tensor([[1.,0,0], [0,1.,0]]).view(2, 3)
-                vcolors = velocity[:, :2] @ colors
-                ps_p.add_color_quantity('v-color', vcolors)
-                ps_p.add_scalar_quantity('v-norm', vnorm)
+        #if self.load_temp and os.path.exists(f'reg_res{seq_id}.pt'):
+        #    print(f'loading from reg_res{seq_id}.pt')
+        #    seq=torch.load(f'reg_res{seq_id}.pt')
+        #    #####BUGGGGGGGGGGG#
+        #    seq.frames.pop()
+        #    ######
+        #    res['lidar_sequence'] = seq
+        #    if self.debug:
+        #        vis = Visualizer([], [])
+        #        center = torch.tensor(points.mean(0)[:3])
+        #        camera = center.clone()
+        #        camera[0] -= 10
+        #        vis.look_at_dir(center, camera, (0,0,1))
+        #        points = seq.points4d()
+        #        ps_p = vis.pointcloud('points', points[:, :3])
+        #        ps_p.add_scalar_quantity('frame % 2', points[:, -1] % 2)
+        #        ps_p.add_scalar_quantity('frame', points[:, -1])
+        #        velocity = seq.velocity()
+        #        velocity = torch.tensor(velocity)
+        #        vnorm = velocity.norm(p=2, dim=-1)
+        #        ps_p.add_scalar_quantity('v-norm >  5 cm', vnorm > 0.05)
+        #        ps_p.add_scalar_quantity('v-norm > 10 cm', vnorm > 0.1)
+        #        ps_p.add_scalar_quantity('v-norm > 15 cm', vnorm > 0.15)
+        #        ps_p.add_scalar_quantity('v-norm', vnorm)
+        #        colors = torch.tensor([[1.,0,0], [0,1.,0]]).view(2, 3)
+        #        vcolors = velocity[:, :2] @ colors
+        #        ps_p.add_color_quantity('v-color', vcolors)
+        #        ps_p.add_scalar_quantity('v-norm', vnorm)
 
-                vis.boxes('boxes', seq.corners(),
-                                   seq.classes())
-                import ipdb; ipdb.set_trace()
-                vis.show()
-            return res, info
+        #        vis.boxes('boxes', seq.corners(),
+        #                           seq.classes())
+        #        import ipdb; ipdb.set_trace()
+        #        vis.show()
+        #    return res, info
         
         self.net = build_neck(self.flownet).to('cuda:0')
         seq = res['lidar_sequence']
+        ### THIS IS A BUG ###
+        ###################################
+        seq.frames = seq.frames[:-1]
+        ####################################
         seq_id = seq.seq_id
         num_frames = len(seq.frames)
         points = torch.tensor(seq.points4d(),
@@ -70,7 +74,7 @@ class LoadNeuralRegResult(object):
                          for i in range(self.window_size)]
         fusion_weight = np.exp(-(np.array(fusion_weight)**2)/2.0)
         fusion_weight = fusion_weight / fusion_weight.sum()
-        print(f'fusion weight: {fusion_weight}')
+        #print(f'fusion weight: {fusion_weight}')
         for f in seq.frames:
             f.velocity = torch.zeros(f.points.shape[0], 3)
             f.vweight = 0.0
@@ -101,10 +105,8 @@ class LoadNeuralRegResult(object):
                 seq.frames[i+d].velocity += vd.detach().cpu().numpy()*weight_d
                 seq.frames[i+d].vweight += weight_d
 
-
         res['lidar_sequence'] = seq
         end_time = time.time()
-        import ipdb; ipdb.set_trace()
 
         if self.debug:
             print(f'load neural reg results: time={end_time-start_time:.4f}')

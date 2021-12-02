@@ -41,7 +41,7 @@ class KalmanFilter:
         S = self.H @ (self.P @ self.H.T) + self.R
         # Calculate the Kalman Gain
         # K = P * H'* inv(H*P*H'+R)
-        K = (self.P @ self.H.T) @ S.inverse()  # Eq.(11)
+        K = (self.P @ self.H.T) @ torch.tensor(np.linalg.inv(S.cpu().numpy()), dtype=torch.float32)  # Eq.(11)
         self.x = self.x + K @ (z - (self.H @ self.x))  # Eq.(12)
         I = torch.eye(self.H.shape[1])
         #self.P = (I - (K * self.H)) * self.P  # Eq.(13)

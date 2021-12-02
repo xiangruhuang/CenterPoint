@@ -42,7 +42,8 @@ class ObjTracking(object):
         self.min_mean_velocity=min_mean_velocity
         self.debug=debug
         self.ht = HashTable(2000000)
-        self.vis = Visualizer([], [])
+        if self.debug:
+            self.vis = Visualizer([], [])
 
     def register(self, points, frame, pc_range, temporal_offset):
 
@@ -57,7 +58,7 @@ class ObjTracking(object):
                     M = ( p[:, :2].unsqueeze(-1) @ (q-t)[:, :2].unsqueeze(-2) ).sum(0)
                     U, S, V = M.double().svd()
                     R2 = V @ U.T
-                    if R2.det().item() < 0:
+                    if np.linalg.det(R2.cpu().numpy()) < 0:
                         R2 = V.clone()
                         R2[:, -1] *= -1
                         R2 = R2 @ U.T
@@ -262,17 +263,18 @@ class ObjTracking(object):
 
     def motion_sync(self, voxels, voxels_velo, num_graphs, graph_idx, vp_edges, seq):
         #voxels_gpu = voxels.cuda()
-        vis = Visualizer([], [])
-        ps_v = vis.pointcloud('voxels', voxels[:, :3])
-        vnorm = voxels_velo.norm(p=2, dim=-1)
-        ps_v.add_scalar_quantity('velocity', vnorm)
+        if self.debug:
+            vis = Visualizer([], [])
+            ps_v = vis.pointcloud('voxels', voxels[:, :3])
+            vnorm = voxels_velo.norm(p=2, dim=-1)
+            ps_v.add_scalar_quantity('velocity', vnorm)
+            vis.boxes('box', seq.corners(), seq.classes())
         points = torch.tensor(seq.points4d(), dtype=torch.float32)
         point_weight = torch.zeros(points.shape[0])
         point_dr = torch.zeros(points.shape[0], 3)
         points_velo = torch.zeros(points.shape[0], 3)
         ev, ep = vp_edges
         points_velo[ep] = voxels_velo[ev]
-        vis.boxes('box', seq.corners(), seq.classes())
         mask = torch.zeros(points.shape[0], dtype=torch.bool)
         is_cropped = torch.zeros(points.shape[0], dtype=torch.bool)
         points_cropped = points.clone()
@@ -316,7 +318,7 @@ class ObjTracking(object):
                 original_indices = original_indices[mask[:points_cropped.shape[0]] == False]
                 points_cropped = points_cropped[mask[:points_cropped.shape[0]] == False]
                 mask[selected_indices] = False
-                ps_p = vis.pointcloud('points', points_cropped[:, :3])
+                #ps_p = vis.pointcloud('points', points_cropped[:, :3])
                 trace_dict = dict(cls={}, box={}, T={}, points={})
                 box_corners, box_classes = [], [] 
 
@@ -331,13 +333,14 @@ class ObjTracking(object):
                                                  dtype=torch.float32)
                     T_f = seq.frames[frame_id].pose
                     dist = (box_centers_f - center_f).norm(p=2, dim=-1)
-                    box_id = dist.argmin()
-                    box_corners.append(torch.tensor(box_corners_f[box_id]))
-                    box_classes.append(torch.tensor(box_classes_f[box_id]))
                     trace_dict['points'][frame_id] = trace_i[mask_f]
                     trace_dict['T'][frame_id] = T_f
-                    trace_dict['box'][frame_id] = seq.frames[frame_id].boxes[box_id]
-                    trace_dict['cls'][frame_id] = seq.frames[frame_id].classes[box_id]
+                    if dist.shape[0] > 0:
+                        box_id = dist.argmin()
+                        #box_corners.append(torch.tensor(box_corners_f[box_id]))
+                        #box_classes.append(torch.tensor(box_classes_f[box_id]))
+                        trace_dict['box'][frame_id] = seq.frames[frame_id].boxes[box_id]
+                        trace_dict['cls'][frame_id] = seq.frames[frame_id].classes[box_id]
 
                 #box_corners = torch.stack(box_corners, dim=0)
                 #box_classes = torch.stack(box_classes, dim=0)

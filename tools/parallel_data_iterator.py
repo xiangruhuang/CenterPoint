@@ -9,6 +9,7 @@ warnings.simplefilter('ignore', category=NumbaDeprecationWarning)
 warnings.simplefilter('ignore', category=NumbaWarning)
 
 import numpy as np
+import glob
 import torch
 import yaml
 from det3d.datasets import build_dataset
@@ -99,7 +100,9 @@ def main():
     dataset = build_dataset(cfg.data.train)
     n = len(dataset)
     for i in range(n):
-        if i % 16 != args.split:
+        if i % 14 != (args.split-1)*2:
+            continue
+        if os.path.exists(f'work_dirs/object_traces/seq_{i}_trace_0.pt'):
             continue
         print(f'loading seq {i}')
         data = dataset[i]

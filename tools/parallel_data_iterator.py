@@ -100,7 +100,10 @@ def main():
     dataset = build_dataset(cfg.data.train)
     n = len(dataset)
     for i in range(n):
-        if i % 14 != (args.split-1)*2:
+        if i % 2 == 0:
+            continue
+        idx = i // 2
+        if idx % 8 != args.split:
             continue
         if os.path.exists(f'work_dirs/object_traces/seq_{i}_trace_0.pt'):
             continue

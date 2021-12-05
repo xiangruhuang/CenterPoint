@@ -18,7 +18,7 @@ class Frame:
         self.load_annos()
         self.load_points()
         self.pose = np.eye(4)
-        self.camera_loc = np.eye(3)
+        self.camera_loc = np.zeros(3)
     
     def transform(self, T):
         self.pose = T @ self.pose

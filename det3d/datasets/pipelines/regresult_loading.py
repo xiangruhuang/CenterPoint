@@ -84,6 +84,7 @@ class LoadNeuralRegResult(object):
                             f'seq_{seq_id}_frame_{i}.pt',
                         )
             assert os.path.exists(load_path)
+
             checkpoint = torch.load(load_path)
             self.net.load_state_dict(checkpoint['model_state_dict'])
             points_xyzt = seq.points4d(i, i+self.window_size)

@@ -34,6 +34,7 @@ class Sequence:
             end_frame = len(self.frames)
         for frame in self.frames[start_frame:end_frame]:
             traj.append(frame.camera_loc)
+        return traj
 
     def points(self, start_frame=0, end_frame=-1):
         points = []

@@ -58,6 +58,16 @@ def parse_args():
         default=None,
         type=int,
     )
+    parser.add_argument(
+        "--start",
+        default=0,
+        type=int,
+    )
+    parser.add_argument(
+        "--step",
+        default=1,
+        type=int,
+    )
     args = parser.parse_args()
     if "LOCAL_RANK" not in os.environ:
         os.environ["LOCAL_RANK"] = str(args.local_rank)
@@ -99,15 +109,13 @@ def main():
 
     dataset = build_dataset(cfg.data.train)
     n = len(dataset)
-    for i in range(n):
-        if i % 2 == 0:
-            continue
-        idx = i // 2
-        if idx % 8 != args.split:
+
+    for count, i in enumerate(range(args.start, n, args.step)):
+        if count % args.gpus != args.split:
             continue
         if os.path.exists(f'work_dirs/object_traces/seq_{i}_trace_0.pt'):
             continue
-        print(f'loading seq {i}')
+        print(f'loading seq {i}, split={args.split}')
         data = dataset[i]
 
 if __name__ == "__main__":

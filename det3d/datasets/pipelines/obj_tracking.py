@@ -48,7 +48,7 @@ class ObjTracking(object):
     def register(self, points, frame, pc_range, temporal_offset):
 
         def solve(p, q):
-            R = torch.eye(3).float().cuda()
+            R = torch.eye(3).to(p.dtype).cuda()
             if p.shape[0] < 3:
                 t = (q - p @ R.T).mean(0)
                 error = (q - p @ R.T - t).norm(p=2, dim=-1).mean()
@@ -92,22 +92,14 @@ class ObjTracking(object):
 
     def check_status(self, centers, center, error):
         if error > self.threshold:
-            #print(f'error {error}')
             return False
 
         if len(centers) > 1:
             v = center - centers[-1]
             v_last = centers[-1] - centers[-2]
             acc = (v_last - v).norm(p=2, dim=-1)
-            #dir_last = v_last / (v_last.norm(p=2, dim=-1) + 1e-6)
-            #dir_cur = v / (v.norm(p=2, dim=-1) + 1e-6)
-            #angle = (dir_last * dir_cur).sum().arccos() / np.pi * 180
             if acc > self.acc_threshold:
-                #print(f'acc {acc}')
                 return False
-            #if angle > self.angle_threshold:
-            #    print(f'angle {angle}')
-            #    break
 
         return True
 
@@ -118,7 +110,8 @@ class ObjTracking(object):
         Returns:
             trace, centers, T, errors
         """
-        pc_range = torch.cat([points_all.min(0)[0]-3, points_all.max(0)[0]+3], dim=0).cuda()
+        pc_range = torch.cat([points_all.min(0)[0]-3,
+                              points_all.max(0)[0]+3], dim=0).cuda()
         num_frames = points_all[:, -1].max().long()+1
         if temporal_dir == -1:
             end_frame = 0
@@ -129,42 +122,40 @@ class ObjTracking(object):
         if frame_id == end_frame:
             return [], [], [], [], []
         points = _points.clone().cuda()
+        shift = points.mean(0)[:3]
+        points[:, :3] = points[:, :3] - shift 
+        pc_range[:3] -= shift
+        pc_range[4:7] -= shift
         x = torch.zeros(6)
         x[:3] = points.mean(0)[:3].cpu()
         x[3:] = velocity.mean(0).cpu() * temporal_dir
-        #R0, t0 = torch.eye(3).float().cuda(), (velocity.mean(0).cpu() * temporal_dir).cuda()
         center = x[:3]
-        #center = points.mean(0)[:3].cpu()
         kf = KalmanFilter(x, **self.kf_config)
         num_points = points.shape[0]
 
         trace, centers, T, errors = [], [], [], []
         selected_indices = []
-        #import ipdb; ipdb.set_trace()
-        #self.vis.pointcloud('p', points[:, :3].cpu())
         while frame_id != end_frame:
             center_next = kf.predict()
             t0 = (center_next - center).cuda()
             points[:, :3] = points[:, :3] + t0
-            #self.vis.pointcloud('p', points[:, :3].cpu())
             frame_indices = torch.where(points_all[:, -1] \
                                         == (frame_id + temporal_dir))[0]
             frame = points_all[frame_indices].cuda()
-            #self.vis.pointcloud('frame', frame[:, :3].cpu())
+            frame[:, :3] -= shift
             R, t, error = self.register(points, frame, pc_range, temporal_dir)
-            #t = t + R @ t0
             points[:, :3] = points[:, :3] @ R.T + t
-            #self.vis.pointcloud('p-after', points[:, :3].cpu())
-            #R0, t0 = R, t
+            points[:, -1] += temporal_dir
             center = points.mean(0)[:3].cpu()
             if not self.check_status(centers, center, error):
                 break
             ep, ef = self.ht.voxel_graph(frame, points, self.voxel_size,
-                                         temporal_dir, radius=0.10,
+                                         0, radius=0.10,
                                          max_num_neighbors=8)
             selected_indices.append(frame_indices[ef])
             
-            trace.append(points[:num_points].cpu())
+            trace_this = points[:num_points].cpu()
+            trace.append(trace_this)
             errors.append(error)
             centers.append(center)
             Ti = torch.eye(4)
@@ -173,9 +164,10 @@ class ObjTracking(object):
             T.append(Ti)
             kf.update(center)
             frame_id = frame_id + temporal_dir
-            points[:, -1] += temporal_dir
-            #points = torch.cat([points, frame[ef.unique()]], dim=0)
-            #print(points.shape[0])
+
+        for i in range(len(centers)):
+            centers[i] += shift.cpu()
+            trace[i][:, :3] += shift.cpu()
 
         if temporal_dir == -1:
             return trace[::-1], centers[::-1], T[::-1], errors[::-1], selected_indices[::-1]
@@ -184,7 +176,6 @@ class ObjTracking(object):
 
     def track(self, _points, points_all, _velocity):
         velocity = _velocity.clone().cuda()
-        #points_all = points_all.cuda()
         num_frames = points_all[:, -1].max().long()+1
         frame_id = _points[0, -1].long().item()
 
@@ -193,6 +184,7 @@ class ObjTracking(object):
             self.track_dir(_points, points_all, velocity, frame_id, 1)
         
         # backward
+        frame_id = _points[0, -1].long().item()
         trace_b, centers_b, T_b, errors_b, selected_indices_b = \
             self.track_dir(_points, points_all, velocity, frame_id, -1)
         
@@ -242,16 +234,10 @@ class ObjTracking(object):
                                      trace[:, :4].cuda(),
                                      voxel_size.cuda(),
                                      0, radius=1.0).cpu()
-        #et, ev = voxel_graph(voxels, trace[:, :4], voxel_size,
-        #                     0, 32).T.long()
         dist = (trace[et, :3] - voxels[ev, :3]).norm(p=2, dim=-1)
         weight = np.exp(-(dist / 0.3)**2/2.0)
 
         weight_dr = weight[:, np.newaxis] * trace[et, 4:]
-        #voxel_weight += scatter(weight, ev, dim=0,
-        #                        dim_size=voxels.shape[0], reduce='sum')
-        #voxel_dr += scatter(weight_dr, ev, dim=0,
-        #                    dim_size=voxels.shape[0], reduce='sum')
         ev_unique, ev_inv = ev.unique(return_inverse=True)
         weight_dense = scatter(weight, ev_inv, dim=0,
                                dim_size=ev_unique.shape[0], reduce='sum')
@@ -262,7 +248,6 @@ class ObjTracking(object):
         voxel_dr[ev_unique] += weight_dr_dense
 
     def motion_sync(self, voxels, voxels_velo, num_graphs, graph_idx, vp_edges, seq):
-        #voxels_gpu = voxels.cuda()
         if self.debug:
             vis = Visualizer([], [])
             ps_v = vis.pointcloud('voxels', voxels[:, :3])
@@ -302,7 +287,8 @@ class ObjTracking(object):
                 trace = torch.cat(trace, dim=0)
                 avg_time = (time.time()-t0)/(i+1)
                 eta = avg_time * (num_graphs - i)
-                print(f'pass {i:05d}, time={avg_time:.4f}, ETA={eta:.4f}, num_points={points_cropped.shape[0]}')
+                print(f'pass {i:05d}, time={avg_time:.4f}, ETA={eta:.4f}, '\
+                      f'num_points={points_cropped.shape[0]}')
                 #self.update(points, points_gpu, trace, point_weight, point_dr)
                 #ps_trace = vis.pointcloud(f'trace-{i}', trace[:, :3], radius=6e-4, enabled=False)
                 #ps_trace.add_scalar_quantity('frame', trace[:, -1])

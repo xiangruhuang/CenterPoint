@@ -159,3 +159,12 @@ class Sequence:
             object_traces.append(trace_dict)
 
         return object_traces
+
+    def filter_points(self, mask):
+        offset = 0
+        for i, f in enumerate(self.frames):
+            num_points = f.points.shape[0]
+            mask_i = mask[offset:(offset+num_points)]
+            f.filter(mask_i)
+            offset += num_points
+        

@@ -42,11 +42,11 @@ train_pipeline = [
          min_travel_dist=5,
          min_mean_velocity=0.02,
          voxel_size=[0.6, 0.6, 0.6, 1],
-         corres_voxel_size=[2.5,2.5,2.5,1],
+         corres_voxel_size=[0.5,0.5,0.5,1],
          velocity=False,
          crop_points=False,
          min_velo=-1,
-         debug=False),
+         debug=True),
 ]
 
 train_anno = "data/Waymo/infos_train_sequences_filter_zero_gt.pkl"

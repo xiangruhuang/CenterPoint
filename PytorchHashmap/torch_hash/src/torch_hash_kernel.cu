@@ -31,8 +31,16 @@ __device__ Key rp2 = 1999377;
 
 __device__ index_t map2key(const Key* keys, const Key* dims, int num_dim) {
   index_t ans = 0;
+  Key key;
   for (int i = 0; i < num_dim; i++) {
-    ans = ans * dims[i] + keys[i];
+    key = keys[i];
+    if (key >= dims[i]) {
+      key = dims[i]-1;
+    }
+    if (key < 0) {
+      key = 0;
+    }
+    ans = ans * dims[i] + key;
   }
   return ans;
 }

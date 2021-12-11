@@ -15,7 +15,7 @@ class TemporalClustering(object):
         self.radius = 1.0
         self.debug = debug
 
-    def find_clusters(self, voxels, voxels_velo):
+    def find_clusters(self, voxels):
         e0, e1 = voxel_graph(voxels, voxels, self.voxel_size, 0, 64).T.long()
         dp = (voxels[e0] - voxels[e1]).norm(p=2, dim=-1)
         mask = dp < self.radius

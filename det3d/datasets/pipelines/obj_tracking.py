@@ -125,7 +125,7 @@ class ObjTracking(object):
 
                 trace_dict = dict(cls={}, box={}, T={}, points={})
                 if self.debug:
-                    box_corners, box_classes, points_in_box = [], [], [] 
+                    box_corners, box_classes, points_in_box = [], [], []
 
                 for frame_id in range(trace_i[:, -1].min().long(),
                                       trace_i[:, -1].max().long()+1):

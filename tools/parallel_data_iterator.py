@@ -113,8 +113,8 @@ def main():
     for count, i in enumerate(range(args.start, n, args.step)):
         if count % args.gpus != args.split:
             continue
-        if os.path.exists(f'work_dirs/object_traces/seq_{i}_trace_0.pt'):
-            continue
+        #if os.path.exists(f'work_dirs/object_traces/seq_{i}_trace_0.pt'):
+        #    continue
         print(f'loading seq {i}, split={args.split}')
         data = dataset[i]
 

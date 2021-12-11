@@ -83,6 +83,11 @@ class Frame:
         self.transform(T)
 
     def filter(self, mask):
+        """
+        Args:
+            mask (N): the same size as the current number of points
+
+        """
         premask = self.mask == True
         newmask = self.mask[premask]
         newmask[:] = False

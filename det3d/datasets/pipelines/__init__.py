@@ -16,7 +16,9 @@ from .registration import Registration
 from .neural_reg import NeuralRegistration
 from .regresult_loading import LoadNeuralRegResult 
 from .obj_tracking import ObjTracking
+from .temporal_clustering import TemporalClustering
 from .motion_clustering import MotionClustering
+from .compute_stats import ComputeStats
 
 __all__ = [
     "Compose",
@@ -47,4 +49,6 @@ __all__ = [
     "LoadNeuralRegResult",
     "ObjTracking",
     "MotionClustering",
+    "TemporalClustering",
+    "ComputeStats",
 ]

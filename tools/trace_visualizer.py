@@ -12,18 +12,21 @@ def visualize(path):
     classes = []
     points = []
 
-    for fid in data['T'].keys():
+    
+    for i, fid in enumerate(data['T'].keys()):
         T_f = data['T'][fid]
         box = data['box'][fid]
         cls = data['cls'][fid]
         box = box[np.newaxis, :]
+        if (i == 0) and (cls==1):
+            print(cls, box[:, 3:6])
         corner = box_np_ops.center_to_corner_box3d(box[:, :3], box[:, 3:6],
                                                    -box[:, -1], axis=2)[0]
         R_f, t_f = T_f[:3, :3], T_f[:3, 3]
         corner = corner @ R_f.T + t_f
         point_center = data['points'][fid].cpu().mean(0)[:3]
-        if torch.tensor(point_center - corner.mean(0)).norm(p=2, dim=-1) > 4.0:
-            continue
+        #if torch.tensor(point_center - corner.mean(0)).norm(p=2, dim=-1) > 4.0:
+        #    continue
         corners.append(torch.tensor(corner))
         classes.append(cls)
         points.append(data['points'][fid].cpu())

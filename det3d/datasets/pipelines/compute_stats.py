@@ -25,7 +25,8 @@ def solve(p, q):
     for itr in range(3):
         t = (q - p @ R.T).mean(0)
         M = ( p[:, :2].unsqueeze(-1) @ (q-t)[:, :2].unsqueeze(-2) ).sum(0)
-        U, S, V = M.double().svd()
+        U, S, VT = np.linalg.svd(M.double())
+        V = VT.T
         R2 = V @ U.T
         if np.linalg.det(R2.cpu().numpy()) < 0:
             R2 = V.clone()

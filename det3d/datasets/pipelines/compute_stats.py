@@ -32,7 +32,7 @@ def solve(p, q):
             R2 = V.clone()
             R2[:, -1] *= -1
             R2 = R2 @ U.T
-        R[:2, :2] = R2
+        R[:2, :2] = torch.tensor(R2)
         error = (q - p @ R.T - t).norm(p=2, dim=-1).mean()
     t = t + shift
     return R, t, error

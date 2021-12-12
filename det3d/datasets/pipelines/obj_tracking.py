@@ -69,6 +69,82 @@ class ObjTracking(object):
             return False
         return True
 
+    def track(self, cluster, cluster_velo, points, seq):
+        if self.debug:
+            vis = Visualizer([], [])
+            ps_cluster = vis.pointcloud(f'cluster', cluster[:, :3],
+                                        radius=3e-4,
+                                        enabled=False)
+            vis.show()
+        trace, centers, T, errors, selected_indices = \
+                self.tracker.track(cluster, cluster_velo)
+        #if len(trace) > 0:
+        #    print(f'average t={(time.time()-t0)/len(trace):.4f}')
+        if not self.check_trace_status(trace, centers):
+            return None, None 
+        trace_this = torch.cat([cluster, points[selected_indices].cpu()],
+                               dim=0)
+        trace = torch.cat(trace, dim=0)
+        
+        if self.debug:
+            ps_trace = vis.pointcloud(f'trace', trace[:, :3],
+                                      radius=3e-4, enabled=False)
+            ps_trace.add_scalar_quantity('frame', trace[:, -1])
+            ps_c = vis.trace(f'center-trace', centers[:, :3],
+                             enabled=False, radius=3e-4)
+            ps_c.add_scalar_quantity('error', errors.cpu(), defined_on='nodes')
+            vis.pointcloud(f'selected-trace', trace_this[:, :3], radius=3e-4)
+            ps_p = vis.pointcloud('points', points[:, :3].cpu())
+        
+        trace_dict = dict(cls={}, box={}, T={}, points={},
+                          errors=errors)
+        if self.debug:
+            box_corners, box_classes, points_in_box = [], [], []
+
+        for frame_id in range(trace_this[:, -1].min().long(),
+                              trace_this[:, -1].max().long()+1):
+            mask_f = (trace_this[:, -1] == frame_id)
+            center_f = trace_this[mask_f].mean(0)[:3]
+            T_f = seq.frames[frame_id].pose
+            trace_dict['points'][frame_id] = trace_this[mask_f]
+            trace_dict['T'][frame_id] = T_f
+            box_corners_f = seq.corners(frame_id, frame_id+1)
+            box_classes_f = seq.classes(frame_id, frame_id+1)
+            box_centers_f = box_corners_f.mean(1)
+            box_centers_f = torch.tensor(box_centers_f,
+                                         dtype=torch.float32)
+            dist = (box_centers_f - center_f).norm(p=2, dim=-1)
+            if dist.shape[0] > 0:
+                box_id = dist.argmin()
+                if self.debug:
+                    from det3d.core.bbox import box_np_ops
+                    from det3d.core.bbox.geometry import (
+                        points_count_convex_polygon_3d_jit,
+                        points_in_convex_polygon_3d_jit,
+                    )
+                    box_corners.append(torch.tensor(box_corners_f[box_id]))
+                    box_classes.append(torch.tensor(box_classes_f[box_id]))
+                    mask_f = points[:, -1] == frame_id
+                    points_f = points[mask_f]
+                    surfaces = box_np_ops.corner_to_surfaces_3d(
+                                   box_corners_f[box_id][np.newaxis, ...])
+                    indices = points_in_convex_polygon_3d_jit(
+                                  points_f.numpy()[:, :3], surfaces)[:, 0]
+                    points_in_box.append(points_f[indices])
+
+                trace_dict['box'][frame_id] = seq.frames[frame_id].boxes[box_id]
+                trace_dict['cls'][frame_id] = seq.frames[frame_id].classes[box_id]
+
+        if self.debug:
+            box_corners = torch.stack(box_corners, dim=0)
+            box_classes = torch.stack(box_classes, dim=0)
+            vis.boxes('selected box', box_corners, box_classes)
+            points_in_box = torch.cat(points_in_box, dim=0)
+            vis.pointcloud('points in box', points_in_box[:, :3])
+            import ipdb; ipdb.set_trace()
+            vis.show()
+        return trace_dict, selected_indices
+
     def motion_sync(self, voxels, voxels_velo, num_graphs, graph_idx, vp_edges, seq):
         points = torch.tensor(seq.points4d(), dtype=torch.float32)
         ev, ep = vp_edges
@@ -85,90 +161,44 @@ class ObjTracking(object):
         graph_idx_by_point = scatter(torch.tensor(graph_idx[ev]).long(), ep,
                                      dim=0, reduce='max',
                                      dim_size=points.shape[0])
+        deg = scatter(torch.ones(points.shape[0]).long(), graph_idx_by_point,
+                      dim=0, dim_size=num_graphs, reduce='sum')
+
+        visited = torch.zeros(points.shape[0]).long()
+        sorted_indices = torch.argsort(deg, descending=True)
+        mask = (deg[sorted_indices] >= 5) & (deg[sorted_indices] < 1000)
+        print(f'num graphs = {mask.sum()}')
         trace_count = 0
 
-        for i in range(num_graphs):
-            indices = torch.where(graph_idx_by_point == i)[0]
+        start_time = time.time()
+        for i, g_index in enumerate(sorted_indices[mask]):
+            indices = torch.where(graph_idx_by_point == g_index)[0]
+            #print(f'cluster {i}: num points={indices.shape[0]}')
             points_i = points[indices].clone()
-            avg_velo = points_velo[indices].mean(0).norm(p=2)
+            points_velo_i = points_velo[indices]
+            avg_velo = points_velo_i.mean(0).norm(p=2)
             frame_id = points_i[0, -1].long()
-            if (avg_velo > self.min_velo) and (points_i.shape[0] >= 10) \
-                and (points_i.shape[0] < 500):
-                if self.debug:
-                    print(f'cluster {i}: ', end="")
-                    ps_cluster = vis.pointcloud(f'cluster-{i}', points_i[:, :3], radius=3e-4,
-                                                enabled=False)
-                t0 = time.time()
-                trace, centers, T, errors, selected_indices = \
-                        self.tracker.track(points_i, points_velo[indices])
-                if len(trace) > 0:
-                    print(f'average t={(time.time()-t0)/len(trace):.4f}')
-                if not self.check_trace_status(trace, centers):
+            visited_i = visited[indices]
+            visited_ratio = visited_i.sum() / indices.shape[0]
+            if (avg_velo > self.min_velo):
+                if (visited_i.sum() > 10) or (visited_ratio > 0.7):
+                    print(f'visited = {visited}, ratio = {visited_ratio}')
+                    avg_time = (time.time()-start_time) / (i+1)
+                    ETA = (mask.sum() - i) * avg_time
+                    print(f'visited {g_index}, ETA={ETA}')
                     continue
-                trace_i = torch.cat([points_i, points[selected_indices]],
-                                     dim=0)
-                trace = torch.cat(trace, dim=0)
-                avg_time = (time.time()-t0)/(i+1)
-                eta = avg_time * (num_graphs - i)
-                print(f'pass {i:05d}, time={avg_time:.4f}, ETA={eta:.4f}, '\
-                      f'num_points={points.shape[0]}')
-                
-                if self.debug:
-                    ps_trace = vis.pointcloud(f'trace-{i}', trace[:, :3],
-                                              radius=3e-4, enabled=False)
-                    ps_trace.add_scalar_quantity('frame', trace[:, -1])
-                    ps_c = vis.trace(f'center-trace-{i}', centers[:, :3],
-                                     enabled=False, radius=3e-4)
-                    ps_c.add_scalar_quantity('error', errors.cpu(), defined_on='nodes')
-                    vis.pointcloud(f'selected-trace-{i}', trace_i[:, :3], radius=3e-4)
-                    ps_p = vis.pointcloud('points', points[:, :3])
-
-                trace_dict = dict(cls={}, box={}, T={}, points={})
-                if self.debug:
-                    box_corners, box_classes, points_in_box = [], [], []
-
-                for frame_id in range(trace_i[:, -1].min().long(),
-                                      trace_i[:, -1].max().long()+1):
-                    mask_f = (trace_i[:, -1] == frame_id)
-                    center_f = trace_i[mask_f].mean(0)[:3]
-                    T_f = seq.frames[frame_id].pose
-                    trace_dict['points'][frame_id] = trace_i[mask_f]
-                    trace_dict['T'][frame_id] = T_f
-                    box_corners_f = seq.corners(frame_id, frame_id+1)
-                    box_classes_f = seq.classes(frame_id, frame_id+1)
-                    box_centers_f = box_corners_f.mean(1)
-                    box_centers_f = torch.tensor(box_centers_f,
-                                                 dtype=torch.float32)
-                    dist = (box_centers_f - center_f).norm(p=2, dim=-1)
-                    if dist.shape[0] > 0:
-                        box_id = dist.argmin()
-                        if self.debug:
-                            from det3d.core.bbox import box_np_ops
-                            from det3d.core.bbox.geometry import (
-                                points_count_convex_polygon_3d_jit,
-                                points_in_convex_polygon_3d_jit,
-                            )
-                            box_corners.append(torch.tensor(box_corners_f[box_id]))
-                            box_classes.append(torch.tensor(box_classes_f[box_id]))
-                            mask_f = points[:, -1] == frame_id
-                            points_f = points[mask_f]
-                            surfaces = box_np_ops.corner_to_surfaces_3d(
-                                           box_corners_f[box_id][np.newaxis, ...])
-                            indices = points_in_convex_polygon_3d_jit(
-                                          points_f.numpy()[:, :3], surfaces)[:, 0]
-                            points_in_box.append(points_f[indices])
-
-                        trace_dict['box'][frame_id] = seq.frames[frame_id].boxes[box_id]
-                        trace_dict['cls'][frame_id] = seq.frames[frame_id].classes[box_id]
-
-                if self.debug:
-                    box_corners = torch.stack(box_corners, dim=0)
-                    box_classes = torch.stack(box_classes, dim=0)
-                    vis.boxes('selected box', box_corners, box_classes)
-                    points_in_box = torch.cat(points_in_box, dim=0)
-                    vis.pointcloud('points in box', points_in_box[:, :3])
-                    import ipdb; ipdb.set_trace()
-                    vis.show()
+                trace_dict, selected_indices = \
+                    self.track(points_i, points_velo_i, points, seq)
+                if selected_indices is not None:
+                    visited[selected_indices.cpu()] = 1
+                if trace_dict is None:
+                    avg_time = (time.time()-start_time) / (i+1)
+                    ETA = (mask.sum() - i) * avg_time
+                    print(f'failed {g_index}, ETA={ETA}')
+                    continue
+                avg_time = (time.time()-start_time) / (i+1)
+                ETA = (mask.sum() - i) * avg_time
+                print(f'pass {g_index}, ETA={ETA}')
                 save_path = os.path.join(
                                 'work_dirs',
                                 'object_traces',
@@ -185,7 +215,9 @@ class ObjTracking(object):
         ev, ep = res['vp_edges']
         num_graphs, graph_idx = res['num_graphs'], res['graph_idx']
         print(f'num_graphs={num_graphs}')
+        total_time = time.time()
         self.motion_sync(voxels, voxels_velo, num_graphs,
                          graph_idx, res['vp_edges'], seq)
+        print(f'elapsed time={time.time()-total_time}')
         
         return res, info 

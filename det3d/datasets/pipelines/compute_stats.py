@@ -27,7 +27,7 @@ def solve(p, q):
         M = ( p[:, :2].unsqueeze(-1) @ (q-t)[:, :2].unsqueeze(-2) ).sum(0)
         U, S, V = M.double().svd()
         R2 = V @ U.T
-        if np.linalg.det(R2.cpu().numpy()) < 0:
+        if R2.det() < 0:
             R2 = V.clone()
             R2[:, -1] *= -1
             R2 = R2 @ U.T

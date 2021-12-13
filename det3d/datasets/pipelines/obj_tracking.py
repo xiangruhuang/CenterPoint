@@ -14,6 +14,7 @@ from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import connected_components
 import glob
 from .kalman_tracker import KalmanTracker
+from .kalman_group_tracker import KalmanGroupTracker
 
 @PIPELINES.register_module
 class ObjTracking(object):
@@ -43,10 +44,9 @@ class ObjTracking(object):
         self.crop_points = crop_points
         self.debug = debug
         self.ht = HashTable(40000000)
-        self.tracker = KalmanTracker(self.ht, kf_config,
-                                     threshold, acc_threshold,
-                                     voxel_size,
-                                     corres_voxel_size, debug)
+        self.tracker = KalmanGroupTracker(
+                           self.ht, kf_config, threshold, acc_threshold,
+                           voxel_size, corres_voxel_size, debug)
         if self.debug:
             self.vis = Visualizer([], [])
         
@@ -145,13 +145,126 @@ class ObjTracking(object):
             vis.show()
         return trace_dict, selected_indices
 
+    def filter_graphs(self, points, graph_idx_by_point, num_point_range):
+        num_points = graph_idx_by_point.shape[0]
+        num_graphs = graph_idx_by_point.max().item()+1
+        deg = scatter(torch.ones(num_points).long(), graph_idx_by_point,
+                      dim=0, dim_size=num_graphs, reduce='sum')
+        mask = (deg >= num_point_range[0]) & (deg < num_point_range[1])
+        pointwise_mask = mask[graph_idx_by_point]
+        
+        new_graph_index = torch.zeros(num_graphs, dtype=torch.long) - 1
+        new_graph_index[mask] = torch.arange(mask.sum()).long()
+        graph_idx_by_point = new_graph_index[graph_idx_by_point]
+        point_indices = torch.where(graph_idx_by_point != -1)[0]
+        graph_idx_by_point = graph_idx_by_point[point_indices]
+        
+        return graph_idx_by_point, points[point_indices], num_graphs
+    
+    def translate(self, points, graph_idx, is_active_graph):
+        """
+
+        Returns:
+            points
+            graph_idx
+        """
+        is_active_point = is_active_graph[graph_idx]
+        num_graphs = is_active_graph.shape[0]
+        new_graph_index = torch.zeros(num_graphs, dtype=torch.long).cuda() - 1
+        num_active_graphs = is_active_graph.long().sum().item()
+        new_graph_index[is_active_graph] = torch.arange(num_active_graphs).long().cuda()
+
+        return points[is_active_point], new_graph_index[graph_idx][is_active_point]
+
+    def track_dir(self, points, graph_idx, temporal_dir,
+                  transformations, visited):
+        if self.debug:
+            from det3d.core.utils.visualization import Visualizer
+            vis = Visualizer([], [])
+            vis.pointcloud('points', points[:, :3].cpu())
+            vis.show()
+
+        points = points.clone().double().cuda()
+        graph_idx = graph_idx.clone().cuda()
+        num_graphs = graph_idx.max().item() + 1
+        graph_size = scatter(torch.ones_like(graph_idx), graph_idx,
+                             dim=0, dim_size=num_graphs, reduce='sum')
+        original_graph_indices = torch.arange(num_graphs, dtype=torch.long).cuda()
+        centers = scatter(points[:, :3], graph_idx, dim=0,
+                          dim_size=num_graphs, reduce='mean')
+        last_centers = None
+
+        while True:
+            import ipdb; ipdb.set_trace()
+            gwise_R, gwise_t, gwise_error = \
+                                self.tracker.track_graphs(
+                                    points, graph_idx, graph_size, 1)
+
+            # update transformations
+            gwise_theta = gwise_R[:, 0, 0].clip(-1, 1).arccos()
+            gwise_pose = torch.cat([gwise_t, gwise_theta.unsqueeze(-1)], dim=-1)
+            gwise_frame_id = scatter(points[:, -1], graph_idx, dim=0,
+                                     dim_size=original_graph_indices.shape[0],
+                                     reduce='max').long()
+
+            is_active_graph = gwise_error < self.reg_threshold
+            if is_active_graph.any() == False:
+                break
+            is_active_point = is_active_graph[graph_idx]
+            pwise_t, pwise_R = gwise_t[graph_idx], gwise_R[graph_idx]
+            if self.debug:
+                ps_c = vis.pointcloud('graph_centers',
+                                      centers[original_graph_indices, :3].cpu())
+            gwise_centers = scatter(points[:, :3], graph_idx, dim=0, dim_size=num_graphs,
+                                    reduce='mean')
+            points[:, :3] -= gwise_centers[graph_idx]
+            points[:, :3] = (pwise_R @ points[:, :3].unsqueeze(-1)).squeeze(-1) + pwise_t
+            points[:, :3] += gwise_centers[graph_idx]
+            gwise_centers = scatter(points[:, :3], graph_idx, dim=0,
+                                    dim_size=original_graph_indices.shape[0],
+                                    reduce='mean')
+            if self.debug:
+                ps_c.add_vector_quantity('velocity',
+                                         (gwise_centers \
+                                          - centers[original_graph_indices]).cpu())
+                vis.show()
+
+            points, graph_idx = self.translate(points, graph_idx, is_active_graph)
+            points[:, -1] += temporal_dir
+            
+            # check acceleration
+            if last_centers is not None:
+                new_centers = scatter(points, graph_idx, dim=0,
+                                      dim_size=original_graph_indices.shape[0],
+                                      reduce='mean')
+                velocity = new_centers - centers[original_graph_indices]
+                last_velocity = centers[original_graph_indices] \
+                                - last_centers[original_graph_indices]
+                acc = (last_velocity - velocity).norm(p=2, dim=-1)
+                is_active_graph = (acc > self.acc_threshold) & is_active_graph
+                if is_active_graph.any() == False:
+                    break
+
+            # update graph indices for next iteration
+            original_graph_indices = original_graph_indices[is_active_graph]
+
+            # update transformations and visited
+            gwise_frame_id = gwise_frame_id[is_active_graph]
+            gwise_pose = gwise_pose[is_active_graph]
+            visited[(original_graph_indices, gwise_frame_id)] = True
+            transformations[(original_graph_indices, gwise_frame_id)] = gwise_pose
+
+            # update last centers
+            last_centers = centers.clone()
+            centers[original_graph_indices] = \
+                    scatter(points, graph_idx, dim=0,
+                            dim_size=original_graph_indices.shape[0],
+                            reduce='mean')
+
     def motion_sync(self, voxels, voxels_velo, num_graphs, graph_idx, vp_edges, seq):
         points = torch.tensor(seq.points4d(), dtype=torch.float32)
+        num_frames = len(seq.frames)
         ev, ep = vp_edges
-        if self.debug:
-            vis = Visualizer([], [])
-            ps_p = vis.pointcloud('points', points[:, :3])
-            vis.boxes('box', seq.corners(), seq.classes())
         if self.velocity:
             points_velo = torch.zeros(points.shape[0], 3)
             points_velo[ep] = voxels_velo[ev]
@@ -161,12 +274,19 @@ class ObjTracking(object):
         graph_idx_by_point = scatter(torch.tensor(graph_idx[ev]).long(), ep,
                                      dim=0, reduce='max',
                                      dim_size=points.shape[0])
-        deg = scatter(torch.ones(points.shape[0]).long(), graph_idx_by_point,
-                      dim=0, dim_size=num_graphs, reduce='sum')
+        graph_idx_by_point, points, num_graphs = \
+                self.filter_graphs(points, graph_idx_by_point, 
+                                   num_point_range=[5, 3000])
+        transformations = torch.zeros(num_graphs, num_frames, 4,
+                                      dtype=torch.float64).cuda()
+        visited = torch.zeros(num_graphs, num_frames, dtype=torch.bool).cuda()
+        self.track_dir(points, graph_idx_by_point, 1,
+                       transformations, visited)
+        self.track_dir(points, graph_idx_by_point, -1,
+                       transformations, visited)
 
         visited = torch.zeros(points.shape[0]).long()
         sorted_indices = torch.argsort(deg, descending=True)
-        mask = (deg[sorted_indices] >= 5) & (deg[sorted_indices] < 1000)
         print(f'num graphs = {mask.sum()}')
         trace_count = 0
 

@@ -46,7 +46,7 @@ train_pipeline = [
          velocity=False,
          crop_points=False,
          min_velo=-1,
-         debug=False),
+         debug=True),
 ]
 
 train_anno = "data/Waymo/infos_train_sequences_filter_zero_gt.pkl"

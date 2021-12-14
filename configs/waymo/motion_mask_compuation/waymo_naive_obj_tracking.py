@@ -22,7 +22,7 @@ kf_config=dict(dt=1.0/15,
 train_pipeline = [
     dict(type="LoadPointCloudFromFile", dataset=dataset_type),
     dict(type="LoadPointCloudAnnotations", with_bbox=True),
-    dict(type='LoadLiDARSequence', debug=False, load_temp=True, save_temp=True),
+    dict(type='LoadLiDARSequence', debug=False, load_temp=False, save_temp=False),
     dict(type='FilterGround', rel_threshold=0.5, debug=False, lamb=10),
     dict(type='TemporalVoxelization',
          velocity=False,
@@ -46,7 +46,7 @@ train_pipeline = [
          velocity=False,
          crop_points=False,
          min_velo=-1,
-         debug=True),
+         debug=False),
 ]
 
 train_anno = "data/Waymo/infos_train_sequences_filter_zero_gt.pkl"

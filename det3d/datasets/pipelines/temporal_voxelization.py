@@ -32,8 +32,8 @@ class TemporalVoxelization(object):
         import time
         start_time = time.time()
         seq = res['lidar_sequence']
-        seq.frames = seq.frames[:10]
         frames = seq.frames
+        
         voxel_size = torch.tensor(self.voxel_size, dtype=torch.float32)
         points, normals = seq.points4d(), seq.normals()
         points = torch.tensor(points, dtype=torch.float32)

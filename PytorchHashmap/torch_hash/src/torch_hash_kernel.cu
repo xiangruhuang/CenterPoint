@@ -334,15 +334,3 @@ void voxel_graph_gpu(at::Tensor keys, at::Tensor values, at::Tensor reverse_indi
   );
 }
 
-
-
-torch::Tensor track_graphs_gpu(
-                at::Tensor points_tensor,
-                at::Tensor graph_idx_tensor,
-                at::Tensor pose_tensor,
-                int num_graphs) {
-  auto pose = pose_tensor.accessor<double, 2>();
-  //torch::Tensor pose = torch::zeros({num_graphs, 4}, torch::dtype(torch::kFloat64));
-  
-}
-

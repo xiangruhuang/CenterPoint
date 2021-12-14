@@ -26,8 +26,4 @@ void voxel_graph_gpu(at::Tensor keys, at::Tensor values, at::Tensor reverse_indi
                      at::Tensor qmin, at::Tensor qmax, int max_num_neighbors,
                      Float radius, at::Tensor corres_indices);
 
-torch::Tensor track_graphs_gpu(at::Tensor points_tensor,
-                               at::Tensor graph_idx_tensor,
-                               int num_graphs, );
-
 #endif

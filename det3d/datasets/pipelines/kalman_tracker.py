@@ -80,13 +80,13 @@ class KalmanTracker(object):
                 for itr in range(2):
                     t = (q - p @ R.T).mean(0)
                     M = ( p[:, :2].unsqueeze(-1) @ (q-t)[:, :2].unsqueeze(-2) ).sum(0)
-                    U, S, V = M.double().svd()
+                    U, S, VT = np.linalg.svd(M.cpu().double())
+                    V = VT.T
                     R2 = V @ U.T
-                    if np.linalg.det(R2.cpu().numpy()) < 0:
-                        R2 = V.clone()
-                        R2[:, -1] *= -1
-                        R2 = R2 @ U.T
-                    R[:2, :2] = R2
+                    if np.linalg.det(R2) < 0:
+                        V[:, -1] *= -1
+                        R2 = V @ U.T
+                    R[:2, :2] = torch.tensor(R2).cuda()
                     error = (q - p @ R.T - t).norm(p=2, dim=-1).mean()
             return R, t, error
 
@@ -97,7 +97,6 @@ class KalmanTracker(object):
         R[:] = 0; R[0, 0] = 1; R[1, 1] = 1; R[2, 2] = 1;
         t = self.t
         t[:] = 0.0
-        import ipdb; ipdb.set_trace()
         for itr in range(3):
             moving_points = points.clone()
             moving_points[:, :3] = moving_points[:, :3] @ R.T + t
@@ -108,7 +107,7 @@ class KalmanTracker(object):
                 st=time.time()
                 ep, ef = self.ht.find_corres_step2(moving_points.float(),
                                                    0).long()
-                print(f'find corres time={time.time()-st}')
+                #print(f'find corres: npoints={moving_points.shape[0]}, time={time.time()-st}')
             except Exception as e:
                 print(e)
                 import ipdb; ipdb.set_trace()
@@ -123,7 +122,7 @@ class KalmanTracker(object):
             else:
                 st=time.time()
                 R, t, error = solve(points[ep, :3], self.points[ef, :3])
-                print(f'solve time={time.time()-st}')
+                #print(f'solve time={time.time()-st}')
         
         return R, t, error
     
@@ -148,16 +147,19 @@ class KalmanTracker(object):
             cluster[:, -1] += temporal_dir
             start_time = time.time()
             R, t, error = self.register(cluster)
-            print(f'reg time={time.time()-start_time}')
+            #print(f'reg time={time.time()-start_time}')
             cluster[:, :3] = cluster[:, :3] @ R.T + t
             center = cluster.mean(0)[:3].cpu()
             if not self.check_status(centers, center, error):
                 break
-            ep, ef = self.ht.voxel_graph_step2(
+            ec, ep = self.ht.voxel_graph_step2(
                          cluster.float(), 0,
-                         radius=0.10, max_num_neighbors=32)
+                         radius=1.0, max_num_neighbors=128)
+            dist = (cluster[ec, :2] - self.points[ep, :2]).norm(p=2, dim=-1)
+            mask = dist < 0.1
+            ep = ep[mask]
 
-            selected_indices.append(ef.unique())
+            selected_indices.append(ep.unique())
             
             trace.append(cluster.cpu())
             errors.append(error)

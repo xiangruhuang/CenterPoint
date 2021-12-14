@@ -160,6 +160,8 @@ class HashTable:
             ref_points (N, D): reference points
 
         Returns:
+            eq (M): corresponding point index in query_points
+            er (M): corresponding point index in ref_points
 
         """
         pc_range = self.pc_range
@@ -207,7 +209,8 @@ class HashTable:
             temporal_offset: offset in temporal (last) dimension.
 
         Returns:
-            corres (2, M): corresponding point index pairs.
+            eq (M): corresponding point index in query_points
+            er (M): corresponding point index in ref_points
 
         """
         ref_points = ref_points.cuda()
@@ -268,7 +271,8 @@ class HashTable:
             temporal_offset: offset in temporal (last) dimension.
 
         Returns:
-            corres (2, M): corresponding point index pairs.
+            eq (M): corresponding point index in query_points
+            er (M): corresponding point index in ref_points
 
         """
         try:

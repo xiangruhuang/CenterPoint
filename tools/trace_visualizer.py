@@ -45,6 +45,7 @@ def visualize(path):
     #vis.boxes(f'box-pred-{trace_id}', corners, classes, enabled=False)
     ps_p = vis.pointcloud(f'points-{trace_id}', points[:, :3], radius=2e-4, color=(1,1,0))
     ps_p.add_scalar_quantity('frame % 2', points[:, -1] % 2)
+    import ipdb; ipdb.set_trace()
 
 for i, path in enumerate(sys.argv[1:]):
     print(i)

@@ -28,11 +28,10 @@ def solve(p, q):
         U, S, VT = np.linalg.svd(M.double())
         V = VT.T
         R2 = V @ U.T
-        if np.linalg.det(R2.cpu().numpy()) < 0:
-            R2 = V.clone()
-            R2[:, -1] *= -1
-            R2 = R2 @ U.T
-        R[:2, :2] = R2
+        if np.linalg.det(R2) < 0:
+            V[:, -1] *= -1
+            R2 = V @ U.T
+        R[:2, :2] = torch.tensor(R2)
         error = (q - p @ R.T - t).norm(p=2, dim=-1).mean()
     t = t + shift
     return R, t, error

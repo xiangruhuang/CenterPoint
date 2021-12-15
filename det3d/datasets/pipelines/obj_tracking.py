@@ -128,8 +128,10 @@ class ObjTracking(object):
                                     temporal_dir)
 
             # update transformations
-            gwise_theta = gwise_R[:, 0, 0].clip(-1, 1).arccos()
-            gwise_pose = torch.cat([gwise_t, gwise_theta.unsqueeze(-1)], dim=-1)
+            gwise_cos = gwise_R[:, 0, 0].clip(-1, 1)
+            gwise_sin = gwise_R[:, 1, 0].clip(-1, 1)
+            gwise_cossin = torch.stack([gwise_cos, gwise_sin], dim=-1)
+            gwise_pose = torch.cat([gwise_t, gwise_cossin], dim=-1)
 
             is_active_graph = gwise_error < self.reg_threshold
             if is_active_graph.any() == False:
@@ -195,6 +197,42 @@ class ObjTracking(object):
             print(f'num existing graphs={original_graph_indices.shape[0]}'\
                   f', time={time.time()-start_time}')
 
+    def visualize_trace(self, graph_idx, points, visited, transformations,
+                        num_selected_graphs, num_frames):
+        if self.debug:
+            print(f'num trace = {num_selected_graphs}')
+        for gid in range(num_selected_graphs):
+            mask_g = graph_idx == gid
+            trace = [points[mask_g].cpu().clone()]
+            for tdir in [-1, 1]:
+                points_g = points[mask_g].cpu().clone().double()
+                frame_id = points_g[0, -1].long().item()
+                while (frame_id + tdir < num_frames) \
+                        and (frame_id + tdir >= 0) \
+                        and (visited[gid, frame_id+tdir]):
+                    center = points_g.mean(0)[:3]
+                    pose = transformations[gid, frame_id+tdir, :].cpu()
+                    t, cost, sint = pose[:3], pose[3], pose[4]
+                    
+                    R2 = torch.tensor([[cost, -sint],
+                                       [sint,  cost]])
+                    points_g[:, :3] -= center
+                    points_g[:, :2] = points_g[:, :2] @ R2.T
+                    points_g[:, :3] = points_g[:, :3] + t + center
+                    points_g[:, -1] += tdir
+                    trace.append(points_g.cpu().clone())
+                    frame_id += tdir
+                if tdir == -1:
+                    trace = trace[::-1]
+            trace = torch.cat(trace, dim=0)
+            if self.debug:
+                self.vis.pointcloud(f'trace-{gid}', trace[:, :3])
+                import ipdb; ipdb.set_trace()
+                self.vis.show()
+        if self.debug:
+            self.vis.show()
+        import ipdb; ipdb.set_trace()
+
     def motion_sync(self, voxels, voxels_velo, num_graphs, graph_idx, vp_edges, seq):
         points = torch.tensor(seq.points4d(), dtype=torch.float32)
         if self.debug:
@@ -213,7 +251,16 @@ class ObjTracking(object):
         graph_idx_by_point, points, num_graphs = \
                 self.filter_graphs(points, graph_idx_by_point,
                                    num_point_range=[5, 3000])
-        transformations = torch.zeros(num_graphs, num_frames, 4,
+        if self.debug:
+            data=torch.load(f'work_dirs/candidate_traces/seq_{seq.seq_id}.pt')
+            pose = data['pose']
+            visited = data['visited']
+            selected_points = data['points']
+            selected_graph_idx = data['graph_idx']
+            num_selected_graphs = selected_graph_idx.long().max().item()+1
+            self.visualize_trace(selected_graph_idx, selected_points, visited, pose,
+                                 num_selected_graphs, num_frames)
+        transformations = torch.zeros(num_graphs, num_frames, 5,
                                       dtype=torch.float64).cuda()
         trace_centers = torch.zeros(num_graphs, num_frames, 3, dtype=torch.float64).cuda()
         visited = torch.zeros(num_graphs, num_frames, dtype=torch.bool).cuda()
@@ -248,37 +295,6 @@ class ObjTracking(object):
                         points_all=points,
                     )
         torch.save(save_dict, save_path)
-
-        #if self.debug:
-        #    print(f'num trace = {is_active_graph.long().sum()}')
-        #for i, gid in enumerate(torch.where(is_active_graph)[0]):
-        #    mask_g = graph_idx_by_point == gid
-        #    trace = [points[mask_g].cpu().clone()]
-        #    for tdir in [-1, 1]:
-        #        points_g = points[mask_g].cpu().clone().double()
-        #        frame_id = points_g[0, -1].long().item()
-        #        while (frame_id + tdir < num_frames) \
-        #                and (frame_id + tdir >= 0) \
-        #                and (visited[gid, frame_id+tdir]):
-        #            center = points_g.mean(0)[:3]
-        #            pose = transformations[gid, frame_id+tdir, :].cpu()
-        #            t, theta = pose[:3], pose[3]
-        #            R2 = torch.tensor([[theta.cos(), -theta.sin()],
-        #                               [theta.sin(),  theta.cos()]])
-        #            points_g[:, :3] -= center
-        #            points_g[:, :2] = points_g[:, :2] @ R2.T
-        #            points_g[:, :3] = points_g[:, :3] + t + center
-        #            points_g[:, -1] += tdir
-        #            trace.append(points_g.cpu().clone())
-        #            frame_id += tdir
-        #        if tdir == -1:
-        #            trace = trace[::-1]
-        #    trace = torch.cat(trace, dim=0)
-        #    if self.debug:
-        #        self.vis.pointcloud(f'trace-{i}-graph-{gid}', trace[:, :3])
-        #if self.debug:
-        #    self.vis.show()
-        #import ipdb; ipdb.set_trace()
 
     def __call__(self, res, info):
         seq = res['lidar_sequence']

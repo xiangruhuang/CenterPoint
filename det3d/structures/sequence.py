@@ -2,7 +2,7 @@ import numpy as np
 from .frame import Frame, get_frame_id
 
 class Sequence:
-    def __init__(self, info):
+    def __init__(self, info, dtype=np.float64):
         frame_paths = [info['path']]
         for s in info['sweeps']:
             frame_paths.append(s['path'])
@@ -12,9 +12,10 @@ class Sequence:
                              key=lambda s: get_frame_id(s))
         self.seq_id = int(info['path'].split('/')[-1].split('_')[1])
         self.frames = []
+        self.dtype = dtype
         for frame_path in frame_paths:
             try:
-                self.frames.append(Frame(frame_path))
+                self.frames.append(Frame(frame_path, dtype=self.dtype))
             except Exception as e:
                 print(e)
                 import ipdb; ipdb.set_trace()
@@ -27,6 +28,14 @@ class Sequence:
     def tolocal(self):
         for frame in self.frames:
             frame.tolocal()
+
+    def center(self):
+        points = self.points4d()
+        self.scene_center = scene_center = points.mean(0)[:3]
+        T = np.eye(4).astype(self.dtype)
+        T[:3, 3] = -scene_center
+        for frame in self.frames:
+            frame.transform(T)
 
     def camera_trajectory(self, start_frame=0, end_frame=-1):
         traj = []
@@ -69,6 +78,15 @@ class Sequence:
         normals = np.concatenate(normals, axis=0)
         return normals
 
+    def boxes(self, start_frame=0, end_frame=-1):
+        boxes = []
+        if end_frame == -1:
+            end_frame = len(self.frames)
+        for f in self.frames[start_frame:end_frame]:
+            boxes.append(f.boxes)
+        boxes = np.concatenate(boxes, axis=0)
+        return boxes
+    
     def corners(self, start_frame=0, end_frame=-1):
         corners = []
         if end_frame == -1:
@@ -113,6 +131,19 @@ class Sequence:
             tokens.append(f.tokens)
         tokens = np.concatenate(tokens, axis=0)
         return tokens
+
+    def box_centers_4d(self, start_frame=0, end_frame=-1):
+        box_centers = []
+        if end_frame == -1:
+            end_frame = len(self.frames)
+        for f in self.frames[start_frame:end_frame]:
+            center_f = f.corners.mean(1)
+            frame_id = np.ones((center_f.shape[0], 1)) * f.frame_id
+            center_f = np.concatenate([center_f, frame_id], axis=-1)
+            box_centers.append(center_f)
+            
+        box_centers = np.concatenate(box_centers, axis=0)
+        return box_centers
 
     def object_traces(self):
         object_pool = {}

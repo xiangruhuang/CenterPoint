@@ -12,13 +12,14 @@ def get_frame_id(path):
     return int(path.split('/')[-1].split('.')[0].split('_')[3])
 
 class Frame:
-    def __init__(self, path):
+    def __init__(self, path, dtype=np.float64):
         self.path = path
+        self.dtype = dtype
         self.frame_id = get_frame_id(path)
         self.load_annos()
         self.load_points()
-        self.pose = np.eye(4)
-        self.camera_loc = np.zeros(3)
+        self.pose = np.eye(4).astype(self.dtype)
+        self.camera_loc = np.zeros(3).astype(self.dtype)
     
     def transform(self, T):
         self.pose = T @ self.pose
@@ -32,7 +33,8 @@ class Frame:
     def load_points(self):
         self.lidar_file = get_pickle(self.path)['lidars']
         self.points = np.fromfile(self.lidar_file,
-                                  dtype=np.float32).reshape(-1, 6)
+                                  dtype=np.float32
+                                  ).reshape(-1, 6).astype(self.dtype)
         self.feats = self.points[:, 3:]
         self.points = self.points[:, :3]
         self.mask = np.ones(self.points.shape[0], dtype=bool)
@@ -41,21 +43,24 @@ class Frame:
         pcd.estimate_normals(
             search_param=o3d.geometry.KDTreeSearchParamHybrid(
                          radius=0.5, max_nn=30))
-        self.normals = np.array(pcd.normals)
+        self.normals = np.array(pcd.normals, dtype=self.dtype)
 
     def load_annos(self):
         anno_dict = get_pickle(self.path.replace('lidar', 'annos'))
-        self.T = anno_dict['veh_to_global'].reshape(4, 4)
+        self.T = anno_dict['veh_to_global'].reshape(4, 4).astype(self.dtype)
         self.frame_name = anno_dict['frame_name']
         self.scene_name = anno_dict['scene_name']
         cls_map = {'VEHICLE':0, 'PEDESTRIAN':1, 'CYCLIST':2}
         label_map = {0:-1, 1:0, 2:1, 3:-1, 4:2}
         reverse_label_map = {0: 1, 1: 2, 2: 4}
-        self.boxes = np.array([o['box'] for o in anno_dict['objects']])
+        self.boxes = np.array([o['box'] for o in anno_dict['objects']],
+                              dtype=self.dtype)
         self.global_speed = np.array([o['global_speed']
-                                     for o in anno_dict['objects']])
+                                     for o in anno_dict['objects']],
+                                     dtype=self.dtype)
         self.global_accel = np.array([o['global_accel']
-                                     for o in anno_dict['objects']])
+                                     for o in anno_dict['objects']],
+                                     dtype=self.dtype)
         self.tokens = np.array([o['name'] for o in anno_dict['objects']]
                                ).astype(str)
         cls = [label_map[o['label']] if o['num_points'] > 0 else -1 \
@@ -65,7 +70,7 @@ class Frame:
             self.corners = box_np_ops.center_to_corner_box3d(
                 self.boxes[:, :3], self.boxes[:, 3:6], -self.boxes[:, -1], axis=2)
         else:
-            self.corners = np.zeros((0, 8, 3))
+            self.corners = np.zeros((0, 8, 3), dtype=self.dtype)
         mask = (self.classes != -1)
         self.corners = self.corners[mask]
         self.classes = self.classes[mask]

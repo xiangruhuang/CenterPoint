@@ -51,13 +51,13 @@ class KalmanGroupTracker(object):
                  corres_size, valid_mask):
         assert p.dtype == torch.float64
         assert q.dtype == torch.float64
-        p_centers = scatter(p, graph_idx, dim=0, dim_size=num_graphs,
-                            reduce='mean')
-        q_centers = scatter(q, graph_idx, dim=0, dim_size=num_graphs,
-                            reduce='mean')
-        p = p - p_centers[graph_idx]
-        q = q - q_centers[graph_idx]
-        shift = q_centers - p_centers
+        #p_centers = scatter(p, graph_idx, dim=0, dim_size=num_graphs,
+        #                    reduce='mean')
+        #q_centers = scatter(q, graph_idx, dim=0, dim_size=num_graphs,
+        #                    reduce='mean')
+        #p = p - p_centers[graph_idx]
+        #q = q - q_centers[graph_idx]
+        #shift = q_centers - p_centers
         R = torch.eye(3, dtype=torch.float64).repeat(num_graphs, 1, 1).cuda()
 
         for itr in range(3):
@@ -78,7 +78,7 @@ class KalmanGroupTracker(object):
                             dim=0, dim_size=num_graphs)
             error[valid_mask] /= corres_size[valid_mask]
         error[valid_mask == False] = 1e10
-        t = t + shift
+        #t = t + shift
 
         return R, t, error
 

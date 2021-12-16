@@ -288,8 +288,7 @@ class ObjTracking(object):
         travel_dist = (center_r - center_l).norm(p=2, dim=-1)
         mean_velo = travel_dist / trace_length
         
-        # BUG
-        is_active_graph = (trace_length >= 4) \
+        is_active_graph = (trace_length >= 10) \
                           & (mean_velo > self.min_mean_velocity) \
                           & (travel_dist > self.min_travel_dist)
         points = points.cuda()

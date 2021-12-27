@@ -414,7 +414,11 @@ class ObjTracking(object):
             for b in box_ids:
                 points_in_box_b = torch.tensor(points_in_box_dict[b.item()])
                 points_in_box.append(points_in_box_b)
-            points_in_box = torch.cat(points_in_box, dim=0)
+            if len(points_in_box) > 0:
+                points_in_box = torch.cat(points_in_box, dim=0)
+            else:
+                print('empty')
+                points_in_box = torch.zeros(0, 3, dtype=torch.float32).to(scene_center)
             
             # shift to original coordinate system
             selected_nbrs[:, :3] += scene_center

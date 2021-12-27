@@ -101,4 +101,3 @@ class Frame:
         self.points = self.points[mask]
         self.feats = self.feats[mask]
         self.normals = self.normals[mask]
-

@@ -32,6 +32,9 @@ class TemporalVoxelization(object):
         import time
         start_time = time.time()
         seq = res['lidar_sequence']
+        seq.frames = seq.frames[:30]
+        for i in range(30):
+            seq.frames[i].frame_id = i
         frames = seq.frames
         
         voxel_size = torch.tensor(self.voxel_size, dtype=torch.float32)

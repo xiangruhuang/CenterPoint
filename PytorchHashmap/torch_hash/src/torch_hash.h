@@ -26,4 +26,9 @@ void voxel_graph_gpu(at::Tensor keys, at::Tensor values, at::Tensor reverse_indi
                      at::Tensor qmin, at::Tensor qmax, int max_num_neighbors,
                      Float radius, at::Tensor corres_indices);
 
+void points_in_radius_gpu(at::Tensor keys, at::Tensor values, at::Tensor reverse_indices,
+                          at::Tensor dims, at::Tensor query_keys, at::Tensor query_values,
+                          at::Tensor qmin, at::Tensor qmax,
+                          Float radius_2d, at::Tensor visited);
+
 #endif

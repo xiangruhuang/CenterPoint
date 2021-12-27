@@ -2,17 +2,42 @@ from det3d.core.utils.visualization import Visualizer
 import torch, numpy as np
 import sys
 from det3d.core.bbox import box_np_ops
+from torch_scatter import scatter
 
 vis = Visualizer([], [])
+
 def visualize(path):
     trace_id = int(path.split('/')[-1].split('.')[0].split('_')[-1])
+    res = torch.load(f'{trace_id}.pt')
     data=torch.load(path)
 
     corners = []
     classes = []
     points = []
 
+    data = sorted(data, key = lambda x: x['points'].shape[0], reverse=True)
     
+    for i, trace in enumerate(data):
+        points = trace['points']
+        corners = trace['corners']
+        classes = trace['classes']
+        frame_indices = points[:, -1].long()
+        num_frames = frame_indices.max().item() + 1
+        centers = scatter(points[:, :3], frame_indices,
+                          dim_size=num_frames, dim=0, reduce='sum')
+        weights = scatter(torch.ones_like(points[:, -1]), frame_indices,
+                          dim_size=num_frames, dim=0, reduce='sum')
+        mask = weights > 0
+        centers[mask] = centers[mask] / weights[mask].unsqueeze(-1)
+        print(f'processing {i} / {len(data)}')
+        #vis.trace(f'center-trace-{i}', centers[mask])
+        vis.pointcloud(f'points-{i}', points[:, :3], enabled=True)
+        vis.boxes(f'box-{i}', corners, classes, enabled=True)
+        if (i + 1) % 1 == 0:
+            import ipdb; ipdb.set_trace()
+            pass
+    vis.show()
+
     for i, fid in enumerate(data['T'].keys()):
         T_f = data['T'][fid]
         box = data['box'][fid]
@@ -48,6 +73,5 @@ def visualize(path):
     import ipdb; ipdb.set_trace()
 
 for i, path in enumerate(sys.argv[1:]):
-    print(i)
     visualize(path)
 vis.show()

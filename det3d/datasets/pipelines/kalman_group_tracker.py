@@ -58,13 +58,14 @@ class KalmanGroupTracker(object):
         #p = p - p_centers[graph_idx]
         #q = q - q_centers[graph_idx]
         #shift = q_centers - p_centers
-        R = torch.eye(3, dtype=torch.float64).repeat(num_graphs, 1, 1).cuda()
+        T = torch.eye(4, dtype=torch.float64).repeat(num_graphs, 1, 1).cuda()
 
         for itr in range(3):
-            diff = (q - (R[graph_idx] @ p.unsqueeze(-1)).squeeze(-1) )
+            diff = (q - (T[graph_idx, :3, :3] @ p.unsqueeze(-1)).squeeze(-1) )
             t = scatter(diff, graph_idx, dim=0, dim_size=num_graphs,
                         reduce='sum')
             t[valid_mask] /= corres_size[valid_mask].unsqueeze(-1)
+            T[valid_mask, :3, 3] = t[valid_mask]
             M = p[:, :2].unsqueeze(-1) @ (q-t[graph_idx])[:, :2].unsqueeze(-2)
             M = scatter(M.view(-1, 4), graph_idx, dim=0,
                         dim_size=num_graphs, reduce='sum').view(-1, 2, 2)
@@ -72,38 +73,72 @@ class KalmanGroupTracker(object):
             U, S, V = M[valid_mask].svd()
             mask = (V @ U.transpose(1, 2)).det() < 0
             V[mask, -1] *= -1
-            R[valid_mask, :2, :2] = V @ U.transpose(1, 2)
-            diff = q-t[graph_idx] - (R[graph_idx] @ p.unsqueeze(-1)).squeeze(-1)
+            T[valid_mask, :2, :2] = V @ U.transpose(1, 2)
+            diff = q-t[graph_idx] - (T[graph_idx, :3, :3] @ p.unsqueeze(-1)).squeeze(-1)
             error = scatter(diff.norm(p=2, dim=-1), graph_idx, reduce='sum',
                             dim=0, dim_size=num_graphs)
             error[valid_mask] /= corres_size[valid_mask]
         error[valid_mask == False] = 1e10
         #t = t + shift
 
-        return R, t, error
+        return T, error
 
     def track_graphs(self,
                      moving_points,
-                     eg,
-                     graph_size,
+                     eg, graph_size,
                      temporal_dir):
         num_graphs = eg.max().item()+1
-        
-        # find correspondence
-        e_moving, e_static = self.ht.find_corres_step2(
-                                 moving_points.float(), temporal_dir)
 
-        # filter bad correspondence graphs
-        corres_size = scatter(torch.ones_like(e_moving),
-                              eg[e_moving], dim=0,
-                              dim_size=num_graphs, reduce='sum').double()
-        valid_mask = (corres_size > 2) & (corres_size*2 >= graph_size)
+        last_error = None
+        valid_mask = torch.ones(num_graphs, dtype=torch.bool).to(eg.device)
+        gwise_T = torch.eye(4, dtype=torch.float64).repeat(num_graphs, 1, 1).cuda()
+        gwise_error = torch.zeros(num_graphs, dtype=torch.float64).cuda() + 1e10
+        original_graph_indices = torch.arange(num_graphs, dtype=torch.long).cuda()
+
+        points = moving_points.clone()
         
-        # exclude zero-correspondence graphs via `valid_mask`.
-        gwise_R, gwise_t, gwise_error = \
-            self.register(moving_points[e_moving, :3],
-                          self.points[e_static, :3].double(),
-                          eg[e_moving], num_graphs,
-                          corres_size, valid_mask)
+        for itr in range(100):
+            start_time = time.time()
+            is_active_point = valid_mask[eg]
+            active_eg = eg[is_active_point]
+            sel_points = points[is_active_point]
+            moved_sel_points = sel_points.clone()
+            moved_sel_points[:, :3] = \
+                    (gwise_T[active_eg, :3, :3] @ moved_sel_points[:, :3].unsqueeze(-1)
+                     ).squeeze(-1) + gwise_T[active_eg, :3, 3]
+            
+            # find correspondence
+            e_moving, e_static = self.ht.find_corres_step2(
+                                     moved_sel_points.float(), temporal_dir)
+
+            # filter bad correspondence graphs
+            corres_size = scatter(torch.ones_like(e_moving),
+                                  active_eg[e_moving], dim=0,
+                                  dim_size=num_graphs, reduce='sum').double()
+            valid_mask &= (corres_size > 2) & (corres_size*2 >= graph_size)
+            
+            if valid_mask.long().sum() == 0:
+                break
+            # exclude zero-correspondence graphs via `valid_mask`.
+            _gwise_T, _gwise_error = \
+                self.register(sel_points[e_moving, :3],
+                              self.points[e_static, :3].double(),
+                              active_eg[e_moving], num_graphs,
+                              corres_size, valid_mask)
+
+            gwise_T[valid_mask] = _gwise_T[valid_mask]
+            gwise_error[valid_mask] = _gwise_error[valid_mask]
+
+            # stopping conditions
+            if last_error is not None:
+                valid_mask = valid_mask & (_gwise_error < last_error - 5e-3)
+                #gap = (_gwise_error - last_error)[valid_mask]
+                last_error[valid_mask] = _gwise_error[valid_mask]
+            else:
+                last_error = _gwise_error
+                #gap = _gwise_error
+            #print(f'num existing = {valid_mask.long().sum()}, '\
+            #      f'gap.mean = {gap.mean()}, '\
+            #      f'time={time.time()-start_time}')
         
-        return gwise_R, gwise_t, gwise_error
+        return gwise_T[:, :3, :3], gwise_T[:, :3, 3], gwise_error

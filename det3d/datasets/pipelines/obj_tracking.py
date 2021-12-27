@@ -15,6 +15,11 @@ import glob
 from .kalman_tracker import KalmanTracker
 from .kalman_group_tracker import KalmanGroupTracker
 from torch_cluster import knn
+from det3d.core.bbox import box_np_ops
+from det3d.core.bbox.geometry import (
+    points_in_convex_polygon_3d_jit,
+)
+from .object_trace_compare import ObjectTraceCompare
 
 @PIPELINES.register_module
 class ObjTracking(object):
@@ -103,8 +108,9 @@ class ObjTracking(object):
         return points[is_active_point], new_graph_index[graph_idx][is_active_point]
 
     def track_dir(self, points, graph_idx, temporal_dir,
-                  transformations, trace_centers, visited):
+                  transformations, trace_centers, visited, errors):
         points = points.clone().double().cuda()
+        num_frames = points[:, -1].long().max().item() + 1
         graph_idx = graph_idx.clone().cuda()
         num_graphs = graph_idx.max().item() + 1
         graph_size = scatter(torch.ones_like(graph_idx), graph_idx,
@@ -140,9 +146,9 @@ class ObjTracking(object):
             gwise_centers = scatter(points[:, :3], graph_idx, dim=0,
                                     dim_size=num_existing_graphs,
                                     reduce='mean')
-            points[:, :3] -= gwise_centers[graph_idx]
+            #points[:, :3] -= gwise_centers[graph_idx]
             points[:, :3] = (pwise_R @ points[:, :3].unsqueeze(-1)).squeeze(-1) + pwise_t
-            points[:, :3] += gwise_centers[graph_idx]
+            #points[:, :3] += gwise_centers[graph_idx]
             gwise_centers = scatter(points[:, :3], graph_idx, dim=0,
                                     dim_size=num_existing_graphs,
                                     reduce='mean')
@@ -164,7 +170,8 @@ class ObjTracking(object):
                 if is_active_graph.any() == False:
                     break
             
-            points, graph_idx = self.translate(points, graph_idx, is_active_graph)
+            points, graph_idx = self.translate(points, graph_idx,
+                                               is_active_graph)
 
             # update graph indices and frame id
             original_graph_indices = original_graph_indices[is_active_graph]
@@ -177,7 +184,7 @@ class ObjTracking(object):
             gwise_R = gwise_R[is_active_graph]
             gwise_t = gwise_t[is_active_graph]
             # 1.a) compute local rotation angle in [-pi, pi]
-            theta = gwise_R[:, 0, 0].arccos() * gwise_R[:, 0, 0].sign()
+            theta = gwise_R[:, 0, 0].clip(-1, 1).arccos() * gwise_R[:, 0, 0].sign()
             # 1.b) compute global rotation angle
             global_theta = transformations[(original_graph_indices,
                                             gwise_frame_id)][:, 3].clone()+theta
@@ -190,6 +197,10 @@ class ObjTracking(object):
             # 1.d) update 
             transformations[(original_graph_indices, 
                              gwise_frame_id + temporal_dir)] = global_pose
+
+            # update registration error
+            gwise_error = gwise_error[is_active_graph]
+            errors[(original_graph_indices, gwise_frame_id + temporal_dir)] = gwise_error
 
             # update visited and centers
             visited[(original_graph_indices, 
@@ -252,7 +263,8 @@ class ObjTracking(object):
         seq.center()
         points = torch.tensor(seq.points4d(), dtype=torch.float32)
         if self.debug:
-            self.vis.pointcloud('points', points[:, :3].cpu()+seq.scene_center)
+            ps_p = self.vis.pointcloud('points', points[:, :3].cpu()+seq.scene_center)
+            ps_p.add_scalar_quantity('frame', points[:, -1].cpu())
         num_frames = len(seq.frames)
         ev, ep = vp_edges
         if self.velocity:
@@ -261,22 +273,44 @@ class ObjTracking(object):
         else:
             points_velo = torch.zeros(points.shape[0], 3)
         self.tracker.set_points(points)
+        self.compare = ObjectTraceCompare(points.shape[0])
         graph_idx_by_point_ori = scatter(torch.tensor(graph_idx[ev]).long(), ep,
                                          dim=0, reduce='max',
                                          dim_size=points.shape[0])
-        graph_idx_by_point, points, num_graphs = \
-                self.filter_graphs(points, graph_idx_by_point_ori,
-                                   num_point_range=[5, 3000])
-        transformations = torch.zeros(num_graphs, num_frames, 4,
-                                      dtype=torch.float64).cuda()
-        trace_centers = torch.zeros(num_graphs, num_frames, 3,
-                                    dtype=torch.float64).cuda()
-        visited = torch.zeros(num_graphs, num_frames, dtype=torch.bool).cuda()
-        self.track_dir(points, graph_idx_by_point, 1,
-                       transformations, trace_centers, visited)
-        self.track_dir(points, graph_idx_by_point, -1,
-                       transformations, trace_centers, visited)
-            
+        if True:
+            graph_idx_by_point, points, num_graphs = \
+                    self.filter_graphs(points, graph_idx_by_point_ori,
+                                       num_point_range=[5, 3000])
+            transformations = torch.zeros(num_graphs, num_frames, 4,
+                                          dtype=torch.float64).cuda()
+            trace_centers = torch.zeros(num_graphs, num_frames, 3,
+                                        dtype=torch.float64).cuda()
+            errors = torch.zeros(num_graphs, num_frames, dtype=torch.float64).cuda()
+            visited = torch.zeros(num_graphs, num_frames, dtype=torch.bool).cuda()
+            self.track_dir(points, graph_idx_by_point, 1,
+                           transformations, trace_centers, visited, errors)
+            self.track_dir(points, graph_idx_by_point, -1,
+                           transformations, trace_centers, visited, errors)
+            if self.debug:
+                save_dict = {}
+                save_dict['transformations'] = transformations
+                save_dict['visited'] = visited
+                save_dict['trace_centers'] = trace_centers
+                save_dict['graph_idx_by_point'] = graph_idx_by_point
+                save_dict['points'] = points
+                save_dict['num_graphs'] = num_graphs
+                save_dict['errors'] = errors
+                torch.save(save_dict, 'saved_tracking.pt')
+        else:
+            save_dict = torch.load('saved_tracking.pt')
+            transformations = save_dict['transformations']
+            visited = save_dict['visited']
+            graph_idx_by_point = save_dict['graph_idx_by_point']
+            points = save_dict['points'].cpu()
+            num_graphs = save_dict['num_graphs']
+            errors = save_dict['errors']
+            trace_centers = save_dict['trace_centers']
+        
         idx0, idx1 = torch.where(visited)
         min_visited_frame_id = scatter(idx1, idx0, dim=0,
                                        dim_size=num_graphs, reduce='min')
@@ -285,50 +319,86 @@ class ObjTracking(object):
         trace_length = max_visited_frame_id - min_visited_frame_id + 1
         center_l = trace_centers[(torch.arange(num_graphs), min_visited_frame_id)]
         center_r = trace_centers[(torch.arange(num_graphs), max_visited_frame_id)]
-        travel_dist = (center_r - center_l).norm(p=2, dim=-1)
+        travel_dist = (center_r - center_l)[:, :3].norm(p=2, dim=-1)
         mean_velo = travel_dist / trace_length
         
         is_active_graph = (trace_length >= 10) \
                           & (mean_velo > self.min_mean_velocity) \
                           & (travel_dist > self.min_travel_dist)
+        
         points = points.cuda()
         graph_idx_by_point = graph_idx_by_point.cuda()
         selected_points, selected_graph_idx = \
             self.translate(points, graph_idx_by_point, is_active_graph)
+        trace_length = trace_length[is_active_graph]
+        travel_dist = travel_dist[is_active_graph]
         num_active_graphs = selected_graph_idx.long().max().item() + 1
         visited = visited[is_active_graph]
         transformations=transformations[is_active_graph]
         trace_centers=trace_centers[is_active_graph]
+        errors = errors[is_active_graph]
 
         print(f'num active graph={num_active_graphs}')
         traces = []
         box_centers = torch.tensor(seq.box_centers_4d()).float()
-        box_centers[:, -1] *= 10000
         corners = torch.tensor(seq.corners())
         classes = torch.tensor(seq.classes())
         boxes = torch.tensor(seq.boxes())
         scene_center = torch.tensor(seq.scene_center)
-        for gid in range(num_active_graphs):
+        points_in_box_dict = {}
+        for fid in range(num_frames):
+            print(f'frame={fid}')
+            mask = self.tracker.points[:, -1].long() == fid
+            box_ids = torch.where(box_centers[:, -1].long() == fid)[0]
+            if box_ids.shape[0] == 0:
+                continue
+            surfaces = box_np_ops.corner_to_surfaces_3d(
+                           corners[box_ids].cpu().numpy()
+                       )
+            frame = self.tracker.points[mask, :3].cpu().numpy()
+            indices = points_in_convex_polygon_3d_jit(
+                          frame, surfaces)
+            for i, b in enumerate(box_ids):
+                mask_b = indices[:, i]
+                points_in_box_dict[b.item()] = frame[mask_b]
+
+        box_centers[:, -1] *= 10000
+        graph_list = sorted(torch.arange(num_active_graphs),
+                            key = lambda i: trace_length[i],
+                            reverse=True)
+
+        for i, gid in enumerate(graph_list):
+            # find points near the trace
             mask_g = selected_graph_idx == gid
             points_g = selected_points[mask_g].clone().double()
+            cluster_g = points_g.clone()
             act_frame_ids = torch.where(visited[gid, :])[0]
             num_act_frames = act_frame_ids.shape[0]
             num_act_points = mask_g.long().sum().item()
+            transformations_g = transformations[gid]
             pose_g = transformations[gid, act_frame_ids]
             t_g, theta_g = pose_g[:, :3], pose_g[:, 3]
             R_g = torch.stack([theta_g.cos(), -theta_g.sin(),
                                theta_g.sin(),  theta_g.cos()],
                               dim=-1).view(-1, 2, 2)
+            errors_g = errors[gid, act_frame_ids]
             points_g = points_g.repeat(num_act_frames, 1, 1)
+            points_g = points_g
             points_g[:, :, :2] = points_g[:, :, :2] @ R_g.transpose(1, 2)
             points_g[:, :, :3] += t_g.unsqueeze(-2)
             points_g[:, :, 3] = act_frame_ids.unsqueeze(-1)
             points_g = points_g.view(-1, 4).float()
-            eq, er = self.tracker.ht.voxel_graph_step2(points_g, 0, 1.0, 64)
-            dist = (points_g[eq, :2] - self.tracker.points[er, :2]
-                    ).norm(p=2, dim=-1)
-            eq, er = eq[dist < 0.1], er[dist < 0.1]
-            selected_nbrs = self.tracker.points[er].cpu()
+            selected_indices = self.tracker.ht.points_in_radius_step2(
+                                   points_g, 0, 1.0
+                               )
+            #eq, er = self.tracker.ht.voxel_graph_step2(points_g, 0, 2.5, 256)
+            #mask_dist = (points_g[eq, :2] - self.tracker.points[er, :2]
+            #             ).norm(p=2, dim=-1) < 1.0
+            #eq, er = eq[mask_dist], er[mask_dist]
+            #selected_indices = er.unique()
+
+            # find nearest ground truth boxes
+            selected_nbrs = self.tracker.points[selected_indices].cpu()
             frame_ids = selected_nbrs[:, -1].long()
             selected_centers = scatter(selected_nbrs, frame_ids, dim=0,
                                        dim_size=num_frames, reduce='sum')
@@ -338,25 +408,85 @@ class ObjTracking(object):
             selected_centers = selected_centers[mask] / num_frames_[mask].unsqueeze(-1)
             selected_centers[:, -1] *= 10000
             _, box_ids = knn(box_centers, selected_centers, 1)
+
+            # find all points in ground truth boxes
+            points_in_box = []
+            for b in box_ids:
+                points_in_box_b = torch.tensor(points_in_box_dict[b.item()])
+                points_in_box.append(points_in_box_b)
+            points_in_box = torch.cat(points_in_box, dim=0)
             
             # shift to original coordinate system
             selected_nbrs[:, :3] += scene_center
-            trace_dict = dict(
-                              points=selected_nbrs,
-                              boxes=boxes[box_ids],
-                              corners=corners[box_ids]+scene_center,
-                              classes=classes[box_ids],
-                             )
-
-            if self.debug:
-                self.vis.boxes(f'box-{gid}', corners[box_ids]+scene_center, classes[box_ids])
-                self.vis.pointcloud(f'trace-{gid}', selected_nbrs[:, :3])
-                if (gid + 1) % 10 == 0:
-                    import ipdb; ipdb.set_trace()
+            
+            # add trace to queue
+            survive, conflict_list = self.compare.compare(selected_indices.cpu())
+            print(f'working on {i}, num trace = {len(self.compare.trace_dict.keys())}')
+            if survive:
+                # construct trace dictionary
+                trace_dict = dict(
+                                  points=selected_nbrs.cpu(),
+                                  cluster=cluster_g,
+                                  point_indices=selected_indices.cpu(),
+                                  boxes=boxes[box_ids].cpu(),
+                                  corners=(corners[box_ids]+scene_center).cpu(),
+                                  classes=classes[box_ids].cpu(),
+                                  points_in_box=points_in_box.cpu()+scene_center,
+                                  errors=errors_g,
+                                  transformations=pose_g,
+                                 )
+                self.compare.add_object_trace(
+                    gid, trace_dict, conflict_list
+                )
+                if self.debug:
+                    self.vis.pointcloud(f'cluster-{gid}', 
+                                        points_g[:, :3].cpu()+scene_center,
+                                        enabled=False)
+                    corners_this = trace_dict['corners']
+                    classes_this = trace_dict['classes']
+                    self.vis.boxes(f'box-{i}', corners_this,
+                                   classes_this, enabled=False)
+                    points = trace_dict['points']
+                    ps_t = self.vis.pointcloud(f'trace-{i}', points[:, :3],
+                                               radius=2.1e-4)
+                    z_axis = torch.zeros(points.shape[0], 3)
+                    z_axis[:, -1] = 1.0
+                    ps_t.add_vector_quantity('z-axis', z_axis)
+                    points_in_box = trace_dict['points_in_box']
+                    self.vis.pointcloud(f'points-in-box-{i}',
+                                        points_in_box[:, :3].cpu(),
+                                        radius=2.05e-4, enabled=False)
+                    self.vis.pointcloud(f'moving-frame-{i}',
+                                        points_g[:, :3].cpu()+scene_center,
+                                        radius=2.1e-4, enabled=False)
                     self.vis.show()
-            traces.append(trace_dict)
+
         save_path = f'work_dirs/candidate_traces/seq_{seq.seq_id}.pt'
         print(f'saving to {save_path}')
+        for trace_id, trace_dict in self.compare.trace_dict.items():
+            if self.debug:
+                corners = trace_dict['corners']
+                classes = trace_dict['classes']
+                self.vis.boxes(f'box-{trace_id}', corners,
+                               classes, enabled=False)
+                points = trace_dict['points']
+                ps_t = self.vis.pointcloud(f'trace-{trace_id}', points[:, :3],
+                                           radius=2.1e-4)
+                z_axis = torch.zeros(points.shape[0], 3)
+                z_axis[:, -1] = 1.0
+                ps_t.add_vector_quantity('z-axis', z_axis)
+                points_in_box = trace_dict['points_in_box']
+                self.vis.pointcloud(f'points-in-box-{gid}',
+                                    points_in_box[:, :3].cpu(),
+                                    radius=2.05e-4, enabled=False)
+                #self.vis.pointcloud(f'moving-frame-{gid}',
+                #                    points_g[:, :3].cpu(),
+                #                    radius=2.1e-4, enabled=False)
+                #if (trace_id + 1) % 10 == 0:
+                #    import ipdb; ipdb.set_trace()
+                #    self.vis.show()
+            traces.append(trace_dict)
+            
         torch.save(traces, save_path)
 
     def __call__(self, res, info):

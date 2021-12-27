@@ -148,6 +148,71 @@ __global__ void correspondence_kernel(
   }
 }
 
+__global__ void points_in_radius_kernel(
+                  Key* ht_keys, // hash table keys, values
+                  Float* ht_values,
+                  Key* reverse_indices, // indices to original hashed array
+                  index_t ht_size, // hashtable size
+                  const Key* dims, // maximum size of each dimension
+                  int num_dim, // number of dimensions
+                  Key* query_keys, // query keys in shape [N, D]
+                  const Float* query_values, // query values
+                  uint32 num_queries, //
+                  const int* qmin, const int* qmax, // query range in each dimension
+                  const Float radius_2d,
+                  Key* visited // correspondence results
+                  ) {
+  unsigned int threadid = blockIdx.x*blockDim.x + threadIdx.x;
+  if (threadid < num_queries) {
+    Key* query_key_ptr = &query_keys[threadid*num_dim];
+    
+    int num_neighbors = 0;
+    // number of voxels to query
+    int num_combination = 1;
+    for (int i = 0; i < num_dim; i++) {
+      num_combination *= (qmax[i] - qmin[i] + 1);
+    }
+
+    // enumerate all directions
+    Float dist, di;
+    Float radius_2d2 = radius_2d*radius_2d;
+    for (int c = 0; c < num_combination; c++) {
+      int temp = c;
+      for (int i = 0; i < num_dim; i++) {
+        query_key_ptr[i] += temp % (qmax[i] - qmin[i] + 1) + qmin[i];
+        temp /= (qmax[i] - qmin[i] + 1);
+      }
+      Key query_key = map2key(query_key_ptr, dims, num_dim);
+      index_t hash_idx = hashkey(query_key, ht_size);
+      const Float* query_value = &query_values[threadid*num_dim];
+      while (ht_keys[hash_idx] != -1) {
+        if (ht_keys[hash_idx] == query_key) {
+          const Float* ht_value = &ht_values[hash_idx*num_dim];
+          // calculate distance
+          dist = 0.0;
+          for (int i = 0; i < 2; i++) {
+            di = ht_value[i] - query_value[i];
+            dist = dist + di*di;
+          }
+
+          if (dist < radius_2d2) {
+            int reverse_idx = reverse_indices[hash_idx];
+            auto prev = atomicCAS((unsigned long long int*)(&visited[reverse_idx]),
+                                  (unsigned long long int)0,
+                                  (unsigned long long int)1);
+          }
+        }
+        hash_idx = (hash_idx + 1) % ht_size;
+      }
+      temp = c;
+      for (int i = 0; i < num_dim; i++) {
+        query_key_ptr[i] -= temp % (qmax[i] - qmin[i] + 1) + qmin[i];
+        temp /= (qmax[i] - qmin[i] + 1);
+      }
+    }
+  }
+}
+
 __global__ void voxel_graph_kernel(
                   Key* ht_keys, // hash table keys, values
                   Float* ht_values,
@@ -334,3 +399,46 @@ void voxel_graph_gpu(at::Tensor keys, at::Tensor values, at::Tensor reverse_indi
   );
 }
 
+void points_in_radius_gpu(at::Tensor keys, at::Tensor values, at::Tensor reverse_indices,
+                          at::Tensor dims, at::Tensor query_keys, at::Tensor query_values,
+                          at::Tensor qmin, at::Tensor qmax,
+                          Float radius_2d, at::Tensor visited) {
+  CHECK_INPUT(keys);
+  CHECK_INPUT(values);
+  CHECK_INPUT(dims);
+  CHECK_INPUT(query_keys);
+  CHECK_INPUT(query_values);
+  CHECK_INPUT(qmin);
+  CHECK_INPUT(qmax);
+  CHECK_INPUT(visited);
+
+  Key* key_data = keys.data<Key>();
+  Key* reverse_index_data = reverse_indices.data<Key>();
+  int num_dim = query_values.size(1);
+  Key* query_key_data = query_keys.data<Key>();
+  Float* value_data = values.data<Float>();
+  const Float* query_value_data = query_values.data<Float>();
+  index_t ht_size = keys.size(0);
+  uint32 num_queries = query_keys.size(0);
+  const int* qmin_data = qmin.data<int>();
+  const int* qmax_data = qmax.data<int>();
+  const Key* dims_data = dims.data<Key>();
+
+  Key* visited_data = visited.data<Key>();
+
+  int mingridsize, threadblocksize;
+  cudaOccupancyMaxPotentialBlockSize(&mingridsize, &threadblocksize,
+     correspondence_kernel, 0, 0);
+
+  uint32 gridsize = (num_queries + threadblocksize - 1) / threadblocksize;
+  points_in_radius_kernel<<<gridsize, threadblocksize>>>(
+    key_data, value_data, reverse_index_data,
+    ht_size, dims_data, num_dim,
+    query_key_data, query_value_data,
+    num_queries,
+    qmin_data, qmax_data,
+    radius_2d,
+    visited_data
+  );
+  
+}

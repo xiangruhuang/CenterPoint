@@ -2,7 +2,8 @@ import torch
 from .torch_hash_cuda import (
     hash_insert_gpu,
     correspondence,
-    voxel_graph_gpu
+    voxel_graph_gpu,
+    points_in_radius_gpu
 )
 
 class HashTable:
@@ -27,6 +28,51 @@ class HashTable:
 
     def clear(self):
         self.keys[:] = -1
+
+    def points_in_radius_step2(self, query_points, temporal_offset,
+                               radius_2d=0.5):
+        """
+
+        Args:
+            query_points (M, D): query points
+            temporal_offset: offset in temporal (last) dimension.
+
+        Returns:
+            eq (M): corresponding point index in query_points
+            er (M): corresponding point index in ref_points
+
+        """
+        try:
+            voxel_size = self.voxel_size
+            ndim = self.ndim
+            pc_range = self.pc_range
+        except Exception as e:
+            raise ValueError(f'make sure you call hash_into_gpu first: {e}')
+        
+        query_points = query_points.cuda()
+
+        voxel_coors_query = torch.round(
+                                (query_points-pc_range[:ndim]) / voxel_size
+                            ).long() + 1
+        
+        self.qmin[-1] = temporal_offset
+        self.qmax[-1] = temporal_offset
+
+        if not hasattr(self, 'visited'):
+            self.visited = torch.zeros(self.num_points, dtype=torch.long,
+                                       device=self.device)
+        else:
+            self.visited[:] = 0
+
+        # look up points from hash table
+        points_in_radius_gpu(self.keys, self.values, self.reverse_indices,
+                             self.dims, voxel_coors_query,
+                             query_points, self.qmin, self.qmax,
+                             radius_2d, self.visited)
+
+        point_indices = torch.where(self.visited)[0]
+
+        return point_indices
     
     def hash(self, voxel_coors):
         """
@@ -148,6 +194,7 @@ class HashTable:
         self.dims = ((pc_range[ndim:]-pc_range[:ndim]) / voxel_size).long()+3
         
         self.keys[:] = -1
+        self.num_points = ref_points.shape[0]
         # hash points into hash table
         hash_insert_gpu(self.keys, self.values, self.reverse_indices,
                         self.dims, voxel_coors, points)

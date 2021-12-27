@@ -116,7 +116,11 @@ def main():
         #if os.path.exists(f'work_dirs/object_traces/seq_{i}_trace_0.pt'):
         #    continue
         print(f'loading seq {i}, split={args.split}')
-        data = dataset[i]
+        try:
+            data = dataset[i]
+        except Exception as e:
+            print('Error')
+            print(e)
 
 if __name__ == "__main__":
     main()

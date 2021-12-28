@@ -64,6 +64,11 @@ def parse_args():
         type=int,
     )
     parser.add_argument(
+        "--end",
+        default=-1,
+        type=int,
+    )
+    parser.add_argument(
         "--step",
         default=1,
         type=int,
@@ -109,8 +114,10 @@ def main():
 
     dataset = build_dataset(cfg.data.train)
     n = len(dataset)
+    if args.end == -1:
+        args.end = n
 
-    for count, i in enumerate(range(args.start, n, args.step)):
+    for count, i in enumerate(range(args.start, args.end, args.step)):
         if count % args.gpus != args.split:
             continue
         if os.path.exists(f'work_dirs/candidate_traces/seq_{i}.pt'):

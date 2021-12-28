@@ -325,6 +325,12 @@ class ObjTracking(object):
         is_active_graph = (trace_length >= 10) \
                           & (mean_velo > self.min_mean_velocity) \
                           & (travel_dist > self.min_travel_dist)
+        if is_active_graph.sum() < 0.5:
+            print(f'num active graph={is_active_graph.sum()}')
+            save_path = f'work_dirs/candidate_traces/seq_{seq.seq_id}.pt'
+            print(f'saving to {save_path}')
+            torch.save([], save_path)
+            return
         
         points = points.cuda()
         graph_idx_by_point = graph_idx_by_point.cuda()
@@ -341,6 +347,8 @@ class ObjTracking(object):
         print(f'num active graph={num_active_graphs}')
         traces = []
         box_centers = torch.tensor(seq.box_centers_4d()).float()
+        box_geom_centers = torch.zeros(box_centers.shape[0], 4).float()
+        box_geom_centers[:, :3] = box_centers[:, :3]
         corners = torch.tensor(seq.corners())
         classes = torch.tensor(seq.classes())
         boxes = torch.tensor(seq.boxes())
@@ -360,9 +368,12 @@ class ObjTracking(object):
                           frame, surfaces)
             for i, b in enumerate(box_ids):
                 mask_b = indices[:, i]
+                if mask_b.sum() > 0.5:
+                    box_geom_centers[b.item(), :3] = torch.tensor(frame[mask_b].mean(0))
                 points_in_box_dict[b.item()] = frame[mask_b]
 
         box_centers[:, -1] *= 10000
+        box_geom_centers[:, -1] = box_centers[:, -1]
         graph_list = sorted(torch.arange(num_active_graphs),
                             key = lambda i: trace_length[i],
                             reverse=True)
@@ -389,7 +400,7 @@ class ObjTracking(object):
             points_g[:, :, 3] = act_frame_ids.unsqueeze(-1)
             points_g = points_g.view(-1, 4).float()
             selected_indices = self.tracker.ht.points_in_radius_step2(
-                                   points_g, 0, 1.0
+                                   points_g, 0, 0.5,
                                )
             #eq, er = self.tracker.ht.voxel_graph_step2(points_g, 0, 2.5, 256)
             #mask_dist = (points_g[eq, :2] - self.tracker.points[er, :2]
@@ -407,7 +418,8 @@ class ObjTracking(object):
             mask = num_frames_ > 0
             selected_centers = selected_centers[mask] / num_frames_[mask].unsqueeze(-1)
             selected_centers[:, -1] *= 10000
-            _, box_ids = knn(box_centers, selected_centers, 1)
+            _, box_ids = knn(box_geom_centers, selected_centers, 1)
+            dist = (selected_centers - box_geom_centers[box_ids]).norm(p=2, dim=-1)
 
             # find all points in ground truth boxes
             points_in_box = []
@@ -429,11 +441,13 @@ class ObjTracking(object):
                                   cluster=cluster_g,
                                   point_indices=selected_indices.cpu(),
                                   boxes=boxes[box_ids].cpu(),
+                                  box_frame_ids=box_centers[box_ids, -1].cpu()/10000.0,
                                   corners=(corners[box_ids]+scene_center).cpu(),
                                   classes=classes[box_ids].cpu(),
                                   points_in_box=points_in_box.cpu()+scene_center,
                                   errors=errors_g,
                                   transformations=pose_g,
+                                  dist=dist.mean(),
                                  )
                 self.compare.add_object_trace(
                     gid, trace_dict, conflict_list
@@ -460,6 +474,7 @@ class ObjTracking(object):
                                         points_g[:, :3].cpu()+scene_center,
                                         radius=2.1e-4, enabled=False)
                     self.vis.show()
+                    import ipdb; ipdb.set_trace()
 
         save_path = f'work_dirs/candidate_traces/seq_{seq.seq_id}.pt'
         print(f'saving to {save_path}')

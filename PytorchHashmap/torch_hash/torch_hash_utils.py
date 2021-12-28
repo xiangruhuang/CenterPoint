@@ -30,7 +30,7 @@ class HashTable:
         self.keys[:] = -1
 
     def points_in_radius_step2(self, query_points, temporal_offset,
-                               radius_2d=0.5):
+                               radius=0.5):
         """
 
         Args:
@@ -68,7 +68,7 @@ class HashTable:
         points_in_radius_gpu(self.keys, self.values, self.reverse_indices,
                              self.dims, voxel_coors_query,
                              query_points, self.qmin, self.qmax,
-                             radius_2d, self.visited)
+                             radius, self.visited)
 
         point_indices = torch.where(self.visited)[0]
 

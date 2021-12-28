@@ -159,7 +159,7 @@ __global__ void points_in_radius_kernel(
                   const Float* query_values, // query values
                   uint32 num_queries, //
                   const int* qmin, const int* qmax, // query range in each dimension
-                  const Float radius_2d,
+                  const Float radius,
                   Key* visited // correspondence results
                   ) {
   unsigned int threadid = blockIdx.x*blockDim.x + threadIdx.x;
@@ -175,7 +175,7 @@ __global__ void points_in_radius_kernel(
 
     // enumerate all directions
     Float dist, di;
-    Float radius_2d2 = radius_2d*radius_2d;
+    Float radius2 = radius*radius;
     for (int c = 0; c < num_combination; c++) {
       int temp = c;
       for (int i = 0; i < num_dim; i++) {
@@ -190,12 +190,12 @@ __global__ void points_in_radius_kernel(
           const Float* ht_value = &ht_values[hash_idx*num_dim];
           // calculate distance
           dist = 0.0;
-          for (int i = 0; i < 2; i++) {
+          for (int i = 0; i < 3; i++) {
             di = ht_value[i] - query_value[i];
             dist = dist + di*di;
           }
 
-          if (dist < radius_2d2) {
+          if (dist < radius2) {
             int reverse_idx = reverse_indices[hash_idx];
             auto prev = atomicCAS((unsigned long long int*)(&visited[reverse_idx]),
                                   (unsigned long long int)0,
@@ -402,7 +402,7 @@ void voxel_graph_gpu(at::Tensor keys, at::Tensor values, at::Tensor reverse_indi
 void points_in_radius_gpu(at::Tensor keys, at::Tensor values, at::Tensor reverse_indices,
                           at::Tensor dims, at::Tensor query_keys, at::Tensor query_values,
                           at::Tensor qmin, at::Tensor qmax,
-                          Float radius_2d, at::Tensor visited) {
+                          Float radius, at::Tensor visited) {
   CHECK_INPUT(keys);
   CHECK_INPUT(values);
   CHECK_INPUT(dims);
@@ -437,7 +437,7 @@ void points_in_radius_gpu(at::Tensor keys, at::Tensor values, at::Tensor reverse
     query_key_data, query_value_data,
     num_queries,
     qmin_data, qmax_data,
-    radius_2d,
+    radius,
     visited_data
   );
   

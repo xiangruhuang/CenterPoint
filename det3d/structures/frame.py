@@ -54,13 +54,13 @@ class Frame:
         label_map = {0:-1, 1:0, 2:1, 3:-1, 4:2}
         reverse_label_map = {0: 1, 1: 2, 2: 4}
         self.boxes = np.array([o['box'] for o in anno_dict['objects']],
-                              dtype=self.dtype)
+                              dtype=self.dtype).reshape(-1, 9)
         self.global_speed = np.array([o['global_speed']
                                      for o in anno_dict['objects']],
-                                     dtype=self.dtype)
+                                     dtype=self.dtype).reshape(-1, 2)
         self.global_accel = np.array([o['global_accel']
                                      for o in anno_dict['objects']],
-                                     dtype=self.dtype)
+                                     dtype=self.dtype).reshape(-1, 2)
         self.tokens = np.array([o['name'] for o in anno_dict['objects']]
                                ).astype(str)
         cls = [label_map[o['label']] if o['num_points'] > 0 else -1 \

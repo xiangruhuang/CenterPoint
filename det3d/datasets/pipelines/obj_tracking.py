@@ -418,18 +418,23 @@ class ObjTracking(object):
             mask = num_frames_ > 0
             selected_centers = selected_centers[mask] / num_frames_[mask].unsqueeze(-1)
             selected_centers[:, -1] *= 10000
-            _, box_ids = knn(box_geom_centers, selected_centers, 1)
-            dist = (selected_centers - box_geom_centers[box_ids]).norm(p=2, dim=-1)
+            if box_geom_centers.shape[0] > 0:
+                _, box_ids = knn(box_geom_centers, selected_centers, 1)
+                dist = (selected_centers - box_geom_centers[box_ids]).norm(p=2, dim=-1)
 
-            # find all points in ground truth boxes
-            points_in_box = []
-            for b in box_ids:
-                points_in_box_b = torch.tensor(points_in_box_dict[b.item()])
-                points_in_box.append(points_in_box_b)
-            if len(points_in_box) > 0:
-                points_in_box = torch.cat(points_in_box, dim=0)
+                # find all points in ground truth boxes
+                points_in_box = []
+                for b in box_ids:
+                    points_in_box_b = torch.tensor(points_in_box_dict[b.item()])
+                    points_in_box.append(points_in_box_b)
+                if len(points_in_box) > 0:
+                    points_in_box = torch.cat(points_in_box, dim=0)
+                else:
+                    print('empty')
+                    points_in_box = torch.zeros(0, 3, dtype=torch.float32).to(scene_center)
             else:
-                print('empty')
+                box_ids = torch.zeros(0, dtype=torch.long).to(box_geom_centers.device)
+                dist = torch.zeros(1).to(box_geom_centers) + 1e10
                 points_in_box = torch.zeros(0, 3, dtype=torch.float32).to(scene_center)
             
             # shift to original coordinate system

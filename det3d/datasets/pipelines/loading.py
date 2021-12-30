@@ -108,6 +108,21 @@ def get_obj(path):
             obj = pickle.load(f)
     return obj 
 
+@PIPELINES.register_module
+class LoadTracesFromFile(object):
+    def __init__(self, dataset="KittiDataset", **kwargs):
+        self.type = dataset
+
+    def __call__(self, res, info):
+
+        res["type"] = self.type
+
+        if self.type == "WaymoTraceDataset":
+            pass
+        else:
+            raise NotImplementedError
+
+        return res, info
 
 @PIPELINES.register_module
 class LoadPointCloudFromFile(object):

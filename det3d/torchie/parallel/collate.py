@@ -105,7 +105,7 @@ def collate_kitti(batch_list, samples_per_gpu=1):
     for key, elems in example_merged.items():
         if key in ["voxels", "num_points", "num_gt", "voxel_labels", "num_voxels",
                    "cyv_voxels", "cyv_num_points", "cyv_num_voxels", "motion_hm",
-                   "using_motion_mask"]:
+                   "using_motion_mask", "classes"]:
             ret[key] = torch.tensor(np.concatenate(elems, axis=0))
         elif key in [
             "gt_boxes",

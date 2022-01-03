@@ -1,5 +1,5 @@
 from .compose import Compose
-from .formating import Reformat
+from .formating import Reformat, ReformatTrace
 
 from .loading import *
 from .test_aug import DoubleFlip

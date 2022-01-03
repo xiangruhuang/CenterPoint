@@ -16,70 +16,26 @@ target_assigner = dict(
 
 # model settings
 model = dict(
-    type="VoxelNetSSL",
-    pretrained=None,
-    reader=dict(
-        type="VoxelFeatureExtractorV3",
-        num_input_features=5,
-    ),
-    backbone=dict(
-        type="SpMiddleResNetFHD", num_input_features=5, ds_factor=8),
-    neck=dict(
-        type="RPN",
-        layer_nums=[5, 5],
-        ds_layer_strides=[1, 2],
-        ds_num_filters=[128, 256],
-        us_layer_strides=[1, 2],
-        us_num_filters=[256, 256],
-        num_input_features=256,
-        logger=logging.getLogger("RPN"),
-    ),
-    bbox_head=dict(
-        type="CenterHead",
-        in_channels=sum([256, 256]),
-        tasks=tasks,
-        dataset='waymo',
-        weight=2,
-        motion_weight=0.00,
-        code_weights=[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
-        common_heads={'reg': (2, 2), 'height': (1, 2), 'dim':(3, 2), 'rot':(2, 2), 'moving':(1, 2)}, # (output_channel, num_conv)
-    ),
-)
-
-assigner = dict(
-    target_assigner=target_assigner,
-    out_size_factor=get_downsample_factor(model),
-    dense_reg=1,
-    gaussian_overlap=0.1,
-    max_objs=500,
-    min_radius=2,
-    with_motion_mask=True,
-    gaussian_radius=0,
+        type="TraceClassifier",
+        backbone=dict(
+            type="PointTransformer",
+            in_channels=0,
+            out_channels=4,
+            dim_model=[32, 64, 128, 256, 512],
+            k=16,
+        ),
 )
 
 
 train_cfg = dict(
-                 assigner=assigner,
                 )
 
 test_cfg = dict(
-    post_center_limit_range=[-80, -80, -10.0, 80, 80, 10.0],
-    nms=dict(
-        use_rotate_nms=True,
-        use_multi_class_nms=False,
-        nms_pre_max_size=4096,
-        nms_post_max_size=100,
-        nms_iou_threshold=0.05,
-    ),
-    score_threshold=0.2,
-    pc_range=[-75.2, -75.2],
-    out_size_factor=get_downsample_factor(model),
-    voxel_size=[0.1, 0.1],
 )
 
 
 # dataset settings
-dataset_type = "WaymoDataset"
+dataset_type = "WaymoTraceDataset"
 nsweeps = 1
 data_root = "data/Waymo"
 
@@ -129,14 +85,15 @@ voxel_generator = dict(
 )
 
 train_pipeline = [
-        dict(type="LoadTracesFromFile", dataset=dataset_type),
+     dict(type="LoadTracesFromFile", dataset=dataset_type),
+     dict(type="LoadTraceAnnotations"),
 #    dict(type="LoadPointCloudFromFile", dataset=dataset_type),
 #    dict(type="LoadPointCloudAnnotations", with_bbox=True),
 #    dict(type="LoadMotionMasks", seq_interval=9, frame_interval=None, granularity='point'),
 #    dict(type="Preprocess", cfg=train_preprocessor),
 #    dict(type="Voxelization", cfg=voxel_generator),
 #    dict(type="AssignLabel", cfg=train_cfg["assigner"]),
-#    dict(type="Reformat"),
+    dict(type="ReformatTrace"),
 ]
 test_pipeline = [
 #    dict(type="LoadPointCloudFromFile", dataset=dataset_type),
@@ -161,6 +118,7 @@ data = dict(
         ann_file=train_anno,
         class_names=class_names,
         pipeline=train_pipeline,
+        load_interval=10,
     ),
     val=dict(
         type=dataset_type,
@@ -194,9 +152,9 @@ lr_config = dict(
 checkpoint_config = dict(interval=100)
 # yapf:disable
 log_config = dict(
-    interval=1,
+    interval=23,
     hooks=[
-        dict(type="TextLoggerHook"),
+        dict(type="SimpleTextLoggerHook"),
         # dict(type='TensorboardLoggerHook')
     ],
 )

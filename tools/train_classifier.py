@@ -12,14 +12,14 @@ import numpy as np
 import torch
 import yaml
 from det3d.datasets import build_dataset
-from det3d.models import build_detector
+from det3d.models import build_classifier
 from det3d.torchie import Config
 from det3d.torchie.apis import (
     build_optimizer,
     get_root_logger,
     init_dist,
     set_random_seed,
-    train_detector,
+    train_classifier,
 )
 
 
@@ -107,7 +107,7 @@ def main():
         logger.info("Set random seed to {}".format(args.seed))
         set_random_seed(args.seed)
 
-    model = build_detector(cfg.model, train_cfg=cfg.train_cfg, test_cfg=cfg.test_cfg)
+    model = build_classifier(cfg.model, train_cfg=cfg.train_cfg, test_cfg=cfg.test_cfg)
 
     datasets = [build_dataset(cfg.data.train)]
     print(datasets[0][0])
@@ -126,7 +126,7 @@ def main():
 
     # add an attribute for visualization convenience
     model.CLASSES = datasets[0].CLASSES
-    train_detector(
+    train_classifier(
         model,
         datasets,
         cfg,

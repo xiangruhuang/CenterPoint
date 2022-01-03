@@ -110,15 +110,20 @@ def get_obj(path):
 
 @PIPELINES.register_module
 class LoadTracesFromFile(object):
-    def __init__(self, dataset="KittiDataset", **kwargs):
+    def __init__(self, dataset="WaymoTraceDataset", **kwargs):
         self.type = dataset
 
     def __call__(self, res, info):
-
         res["type"] = self.type
 
         if self.type == "WaymoTraceDataset":
-            pass
+            data = torch.load(info['path'])
+            points = torch.tensor(data['points'])
+            indices = torch.randperm(points.shape[0])[:5000]
+            points = points[indices]
+            points[:, -1] /= 10.0
+            points[:, :3] -= points.min(0)[0][:3]
+            res['lidar']['points'] = points
         else:
             raise NotImplementedError
 
@@ -283,6 +288,22 @@ class LoadMotionMasks(object):
             res['lidar']['moving_points'] = moving_points
         else:
             pass
+
+        return res, info
+
+@PIPELINES.register_module
+class LoadTraceAnnotations(object):
+    def __init__(self, **kwargs):
+        pass
+
+    def __call__(self, res, info):
+        if res["type"] == 'WaymoTraceDataset':
+            data = torch.load(info['path'])
+            res["lidar"]["annotations"] = {
+                "cls": torch.tensor(data['cls']),
+            }
+        else:
+            pass 
 
         return res, info
 

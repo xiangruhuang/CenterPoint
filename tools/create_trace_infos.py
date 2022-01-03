@@ -44,6 +44,7 @@ def create_trace_infos(path, save_path):
             save_dict.pop('points')
             traces.append(save_dict)
 
+    import ipdb; ipdb.set_trace()
     pkl_save_path = os.path.join(save_path, 'infos_train_trace_classifier.pkl')
     with open(pkl_save_path, 'wb') as fout:
         pickle.dump(traces, fout)

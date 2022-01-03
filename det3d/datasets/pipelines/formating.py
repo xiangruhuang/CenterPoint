@@ -83,5 +83,25 @@ class Reformat(object):
 
         return data_bundle, info
 
+@PIPELINES.register_module
+class ReformatTrace(object):
+    def __init__(self, **kwargs):
+        pass
 
+    def __call__(self, res, info):
+        meta = res["metadata"]
+        points = res["lidar"]["points"]
+        cls = res['lidar']['annotations']['cls'].view(1)
 
+        data_bundle = dict(
+            metadata=meta,
+            points=points,
+            classes=cls,
+        )
+
+        #if res['lidar'].get('moving_points', None) is not None:
+        #    data_bundle.update({'moving_points': res['lidar']['moving_points']})
+        #if res['lidar'].get('using_motion_mask', None) is not None:
+        #    data_bundle.update({'using_motion_mask': res['lidar']['using_motion_mask']})
+
+        return data_bundle, info

@@ -7,3 +7,4 @@ if found:
 else:
     print("No spconv, sparse convolution disabled!")
 
+from .point_transformer import PointTransformer

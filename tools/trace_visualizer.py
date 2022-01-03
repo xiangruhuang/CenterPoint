@@ -8,7 +8,6 @@ vis = Visualizer([], [])
 
 def visualize(path):
     trace_id = int(path.split('/')[-1].split('.')[0].split('_')[-1])
-    res = torch.load(f'{trace_id}.pt')
     data=torch.load(path)
 
     corners = []
@@ -17,6 +16,7 @@ def visualize(path):
 
     data = sorted(data, key = lambda x: x['points'].shape[0], reverse=True)
     
+    import ipdb; ipdb.set_trace()
     for i, trace in enumerate(data):
         points = trace['points']
         corners = trace['corners']
@@ -35,6 +35,7 @@ def visualize(path):
         vis.boxes(f'box-{i}', corners, classes, enabled=True)
         if (i + 1) % 1 == 0:
             import ipdb; ipdb.set_trace()
+            vis.show()
             pass
     vis.show()
 

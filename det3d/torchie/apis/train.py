@@ -248,6 +248,82 @@ def build_optimizer(model, optimizer_cfg):
         optimizer_cls = getattr(torch.optim, optimizer_cfg.pop("type"))
         return optimizer_cls(params, **optimizer_cfg)
 
+def train_classifier(model, dataset, cfg, distributed=False, validate=False, logger=None):
+    if logger is None:
+        logger = get_root_logger(cfg.log_level)
+
+    # start training
+    # prepare data loaders
+    dataset = dataset if isinstance(dataset, (list, tuple)) else [dataset]
+    data_loaders = [
+        build_dataloader(
+            ds, cfg.data.samples_per_gpu, cfg.data.workers_per_gpu, dist=distributed
+        )
+        for ds in dataset
+    ]
+
+    total_steps = cfg.total_epochs * len(data_loaders[0])
+    # print(f"total_steps: {total_steps}")
+    if distributed:
+        model = apex.parallel.convert_syncbn_model(model)
+    if cfg.lr_config.type == "one_cycle":
+        # build trainer
+        optimizer = build_one_cycle_optimizer(model, cfg.optimizer)
+        lr_scheduler = _create_learning_rate_scheduler(
+            optimizer, cfg.lr_config, total_steps
+        )
+        cfg.lr_config = None
+    else:
+        optimizer = build_optimizer(model, cfg.optimizer)
+        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=cfg.drop_step, gamma=.1)
+        # lr_scheduler = None
+        cfg.lr_config = None 
+
+    # put model on gpus
+    if distributed:
+        model = DistributedDataParallel(
+            model.cuda(cfg.local_rank),
+            device_ids=[cfg.local_rank],
+            output_device=cfg.local_rank,
+            # broadcast_buffers=False,
+            find_unused_parameters=False,
+        )
+    else:
+        model = model.cuda()
+
+    logger.info(f"model structure: {model}")
+
+    trainer = Trainer(
+        model, batch_processor, optimizer, lr_scheduler, cfg.work_dir, cfg.log_level
+    )
+
+    if distributed:
+        optimizer_config = DistOptimizerHook(**cfg.optimizer_config)
+    else:
+        optimizer_config = cfg.optimizer_config
+
+    # register hooks
+    trainer.register_training_hooks(
+        cfg.lr_config, optimizer_config, cfg.checkpoint_config, cfg.log_config
+    )
+
+    if distributed:
+        trainer.register_hook(DistSamplerSeedHook())
+
+    # # register eval hooks
+    # if validate:
+    #     val_dataset_cfg = cfg.data.val
+    #     eval_cfg = cfg.get('evaluation', {})
+    #     dataset_type = DATASETS.get(val_dataset_cfg.type)
+    #     trainer.register_hook(
+    #         KittiEvalmAPHookV2(val_dataset_cfg, **eval_cfg))
+
+    if cfg.resume_from:
+        trainer.resume(cfg.resume_from)
+    elif cfg.load_from:
+        trainer.load_checkpoint(cfg.load_from)
+
+    trainer.run(data_loaders, cfg.workflow, cfg.total_epochs, local_rank=cfg.local_rank)
 
 def train_detector(model, dataset, cfg, distributed=False, validate=False, logger=None):
     if logger is None:

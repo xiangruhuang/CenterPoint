@@ -17,7 +17,7 @@ from det3d.datasets.registry import DATASETS
 
 @DATASETS.register_module
 class WaymoTraceDataset(PointCloudDataset):
-    NumPointFeatures = 5  # x, y, z, intensity, elongation
+    NumPointFeatures = 4  # x, y, z, t
 
     def __init__(
         self,
@@ -28,7 +28,7 @@ class WaymoTraceDataset(PointCloudDataset):
         class_names=None,
         test_mode=False,
         sample=False,
-        load_interval=1,
+        load_interval=10,
         **kwargs,
     ):
         self.load_interval = load_interval
@@ -39,7 +39,7 @@ class WaymoTraceDataset(PointCloudDataset):
 
         self._info_path = info_path
         self._class_names = class_names
-        self._num_point_features = WaymoDataset.NumPointFeatures if nsweeps == 1 else WaymoDataset.NumPointFeatures+1
+        self._num_point_features = WaymoTraceDataset.NumPointFeatures
 
     def reset(self):
         assert False 
@@ -69,17 +69,15 @@ class WaymoTraceDataset(PointCloudDataset):
                 "type": "lidar",
                 "points": None,
                 "annotations": None,
-                "nsweeps": self.nsweeps, 
             },
             "metadata": {
                 "image_prefix": self._root_path,
                 "num_point_features": self._num_point_features,
-                "token": info["token"],
             },
             "calib": None,
             "cam": {},
             "mode": "val" if self.test_mode else "train",
-            "type": "WaymoDataset",
+            "type": "WaymoTraceDataset",
         }
 
         data, _ = self.pipeline(res, info)

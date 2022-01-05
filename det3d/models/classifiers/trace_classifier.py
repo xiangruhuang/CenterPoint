@@ -17,7 +17,6 @@ class TraceClassifier(SimpleClassifier):
         super(TraceClassifier, self).__init__(
             backbone, train_cfg, test_cfg, pretrained
         )
-        self.vis = Visualizer([], [])
 
     def forward(self, example, return_loss=True, **kwargs):
         points = example['points']
@@ -29,11 +28,14 @@ class TraceClassifier(SimpleClassifier):
             return self.predict(example, preds, self.test_cfg)
 
     def loss(self, example, preds):
-        gt_labels = example['classes'].to(preds.device)
+        gt_labels = example['classes'].to(preds.device).long()
         loss = F.nll_loss(preds, gt_labels,
                           weight=torch.tensor([1.0,1.0,10.0,1.0]).to(preds.device))
         loss_dict = dict()
-        loss_dict['loss'] = [loss, loss, loss, loss]
+        loss_dict['loss'] = [loss,
+                             loss,
+                             loss,
+                             loss]
         labels = preds.argmax(-1)
         
         TP = [torch.tensor(0.0).to(preds.device) for i in range(4)]

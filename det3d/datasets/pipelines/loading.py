@@ -118,7 +118,10 @@ class LoadTracesFromFile(object):
 
         if self.type == "WaymoTraceDataset":
             data = torch.load(info['path'])
-            points = torch.tensor(data['points'])
+            points = data['points']
+            if not isinstance(points, torch.Tensor):
+                points = torch.tensor(points)
+            
             indices = torch.randperm(points.shape[0])[:5000]
             points = points[indices]
             points[:, -1] /= 10.0
@@ -299,8 +302,14 @@ class LoadTraceAnnotations(object):
     def __call__(self, res, info):
         if res["type"] == 'WaymoTraceDataset':
             data = torch.load(info['path'])
+            cls = data['cls']
+            if isinstance(cls, float):
+                cls = torch.tensor(cls, dtype=torch.long)
+            if isinstance(cls, int):
+                cls = torch.tensor(cls, dtype=torch.long)
+            cls = cls.long()
             res["lidar"]["annotations"] = {
-                "cls": torch.tensor(data['cls']),
+                "cls": cls,
             }
         else:
             pass 

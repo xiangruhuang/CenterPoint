@@ -13,6 +13,8 @@ import argparse
 def check_trace(points):
     if points.shape[0] == 0:
         return None
+    if points.shape[0] > 1000000:
+        return None
     # check connectivity
     pc_range = torch.cat([points.min(0)[0]-3, points.max(0)[0]+3], dim=0)
     edges_1 = ht.voxel_graph(points, points, voxel_size, pc_range, 1, radius=2.0, max_num_neighbors=128)
@@ -24,7 +26,9 @@ def check_trace(points):
     graph_size = torch.tensor([(graph_indices == c).sum() for c in range(num_comps)])
     if num_comps > 1:
         max_comp_id = graph_size.argmax()
-        return check_trace(points[graph_indices == max_comp_id])
+        sub_points = points.clone()[graph_indices == max_comp_id]
+        del points
+        return check_trace(sub_points)
     
     # check frame integrity
     num_points = points.shape[0]
@@ -97,8 +101,9 @@ def check_trace(points):
     if angle > 30.0:
         print(f'not straight enough, max_angle={angle}')
         frame_mask = (angles < 30)
-        points = points.clone()[frame_mask[frame_ids]]
-        return check_trace(points)
+        sub_points = points.clone()[frame_mask[frame_ids]]
+        del points
+        return check_trace(sub_points)
         #vis.trace('center-trace', frame_centers.detach().cpu().numpy(), radius=2e-3)
         #import ipdb; ipdb.set_trace()
         #vis.show()
@@ -165,9 +170,14 @@ for seq_id in range(798):
     for i, trace_file in enumerate(trace_files):
         print(trace_file)
         trace_id = int(trace_file.split('/')[-1].split('.')[0].split('_')[-1])
+        save_path = os.path.join('data/Waymo/train/traces2/',
+                                 f'seq_{seq_id:03d}_trace_{trace_id:06d}.pt')
+        if os.path.exists(save_path):
+            continue
         #vis.clear()
         trace = torch.load(trace_file)
         points = trace['points']
+        fake_box_frame_ids = points[:, -1].long().unique()
         cls = trace['cls']
         corners = trace['corners']
         classes = trace['classes']
@@ -193,7 +203,7 @@ for seq_id in range(798):
             centers = scatter(res[:, :3], frame_ids - min_frame_id, reduce='mean',
                               dim=0, dim_size=num_frames)
             
-            box_mask = (box_frame_ids <= max_frame_id) & (box_frame_ids >= min_frame_id)
+            box_mask = (fake_box_frame_ids <= max_frame_id) & (fake_box_frame_ids >= min_frame_id)
             boxes = trace['boxes'][box_mask]
             classes = trace['classes'][box_mask]
             corners = trace['corners'][box_mask]
@@ -227,8 +237,6 @@ for seq_id in range(798):
         else:
             if gt_cls != pred_cls:
                 FP += 1
-        save_path = os.path.join('data/Waymo/train/traces2/',
-                                 f'seq_{seq_id:03d}_trace_{trace_id:06d}.pt')
         torch.save(save_dict, save_path)
 
         prec = TP * 1.0 / (TP + FP + 1e-6)

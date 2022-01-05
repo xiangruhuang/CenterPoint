@@ -149,10 +149,10 @@ lr_config = dict(
     type="one_cycle", lr_max=0.003, moms=[0.95, 0.85], div_factor=10.0, pct_start=0.4,
 )
 
-checkpoint_config = dict(interval=100)
+checkpoint_config = dict(interval=1)
 # yapf:disable
 log_config = dict(
-    interval=23,
+    interval=100,
     hooks=[
         dict(type="SimpleTextLoggerHook"),
         # dict(type='TensorboardLoggerHook')
@@ -160,7 +160,7 @@ log_config = dict(
 )
 # yapf:enable
 # runtime settings
-total_epochs = 1200
+total_epochs = 120
 device_ids = range(8)
 dist_params = dict(backend="nccl", init_method="env://")
 log_level = "INFO"

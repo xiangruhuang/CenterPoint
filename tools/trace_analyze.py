@@ -15,17 +15,17 @@ def check_trace(points):
     if points.shape[0] == 0:
         return None
     if points.shape[0] > 100000:
-        ev, ep = voxelization(points, torch.tensor([0.2, 0.2, 0.2, 1], False)[0].T
+        ev, ep = voxelization(points, torch.tensor([0.2, 0.2, 0.2, 1]), False)[0].T
         num_voxels = ev.max().item() + 1
         voxels = scatter(points[ep], ev, reduce='mean', dim=0, dim_size=num_voxels)
         points = voxels
     if points.shape[0] > 100000:
-        ev, ep = voxelization(points, torch.tensor([0.4, 0.4, 0.4, 1], False)[0].T
+        ev, ep = voxelization(points, torch.tensor([0.4, 0.4, 0.4, 1]), False)[0].T
         num_voxels = ev.max().item() + 1
         voxels = scatter(points[ep], ev, reduce='mean', dim=0, dim_size=num_voxels)
         points = voxels
     if points.shape[0] > 100000:
-        ev, ep = voxelization(points, torch.tensor([0.6, 0.6, 0.6, 1], False)[0].T
+        ev, ep = voxelization(points, torch.tensor([0.6, 0.6, 0.6, 1]), False)[0].T
         num_voxels = ev.max().item() + 1
         voxels = scatter(points[ep], ev, reduce='mean', dim=0, dim_size=num_voxels)
         points = voxels

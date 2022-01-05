@@ -238,6 +238,7 @@ for seq_id in range(798):
         else:
             save_dict['valid'] = False
 
+        save_dict['gt_cls'] = cls
         gt_cls = (cls != 3)
 
         if gt_cls:
@@ -248,7 +249,8 @@ for seq_id in range(798):
         else:
             if gt_cls != pred_cls:
                 FP += 1
-        torch.save(save_dict, save_path)
+        if save_dict['valid']:
+            torch.save(save_dict, save_path)
 
         prec = TP * 1.0 / (TP + FP + 1e-6)
         coverage = TP * 1.0 / (FN + TP + 1e-6)

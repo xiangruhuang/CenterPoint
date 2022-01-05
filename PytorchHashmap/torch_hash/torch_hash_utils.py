@@ -260,9 +260,11 @@ class HashTable:
             er (M): corresponding point index in ref_points
 
         """
+        assert ref_points.shape[0] + query_points.shape[0] < self.size * 2
         ref_points = ref_points.cuda()
         query_points = query_points.cuda()
         voxel_size = voxel_size.cuda()
+        pc_range = pc_range.cuda()
 
         self.ndim = ndim = ref_points.shape[-1]
 

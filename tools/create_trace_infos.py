@@ -31,7 +31,11 @@ def create_trace_infos(path, save_path):
                 cls = 3
             else:
                 cls = classes[0]
-            save_dict = dict(points=points, cls=cls)
+            save_dict = dict(points=points, cls=cls,
+                             boxes=trace['boxes'],
+                             corners=trace['corners'],
+                             box_frame_ids=trace['box_frame_ids'],
+                             classes=trace['classes'])
             save_path_t = os.path.join(
                               save_path,
                               'train',
@@ -42,6 +46,10 @@ def create_trace_infos(path, save_path):
             save_dict['path'] = save_path_t
             save_dict['num_boxes'] = points[:, -1].max() - points[:, -1].min() + 1
             save_dict.pop('points')
+            save_dict.pop('corners')
+            save_dict.pop('boxes')
+            save_dict.pop('box_frame_ids')
+            save_dict.pop('classes')
             traces.append(save_dict)
 
     import ipdb; ipdb.set_trace()

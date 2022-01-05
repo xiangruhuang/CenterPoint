@@ -4,7 +4,6 @@ from det3d.torchie.trainer import load_checkpoint
 import torch 
 from copy import deepcopy 
 import torch.nn.functional as F
-from det3d.core.utils.visualization import Visualizer
 
 @CLASSIFIERS.register_module
 class TraceClassifier(SimpleClassifier):
@@ -23,11 +22,6 @@ class TraceClassifier(SimpleClassifier):
     def forward(self, example, return_loss=True, **kwargs):
         points = example['points']
         preds = self.backbone(points)
-        #for i, cls in enumerate(example['classes']):
-        #    if cls == 2:
-        #        self.vis.pointcloud(f'points-{i}-cls-{cls}', points[points[:, 0] == i, 1:4].cpu())
-        #        self.vis.show()
-
 
         if return_loss:
             return self.loss(example, preds)

@@ -15,18 +15,13 @@ def check_trace(points):
     if points.shape[0] == 0:
         return None
     if points.shape[0] > 100000:
-        ev, ep = voxelization(points, torch.tensor([0.2, 0.2, 0.2, 1], False)[0].T
-        num_voxels = ev.max().item() + 1
-        voxels = scatter(points[ep], ev, reduce='mean', dim=0, dim_size=num_voxels)
-        points = voxels
-    if points.shape[0] > 100000:
-        ev, ep = voxelization(points, torch.tensor([0.4, 0.4, 0.4, 1], False)[0].T
-        num_voxels = ev.max().item() + 1
-        voxels = scatter(points[ep], ev, reduce='mean', dim=0, dim_size=num_voxels)
-        points = voxels
-    if points.shape[0] > 100000:
-        ev, ep = voxelization(points, torch.tensor([0.6, 0.6, 0.6, 1], False)[0].T
-        num_voxels = ev.max().item() + 1
+        for vs in [0.2, 0.4, 0.6]:
+            ev, ep = voxelization(points, torch.tensor([vs, vs, vs, 1]), False)[0].T.long()
+            num_voxels = ev.max().item() + 1
+            if num_voxels > 100000:
+                continue
+            else:
+                break
         voxels = scatter(points[ep], ev, reduce='mean', dim=0, dim_size=num_voxels)
         points = voxels
     if points.shape[0] > 100000:
@@ -243,6 +238,7 @@ for seq_id in range(798):
         else:
             save_dict['valid'] = False
 
+        save_dict['gt_cls'] = cls
         gt_cls = (cls != 3)
 
         if gt_cls:
@@ -253,7 +249,8 @@ for seq_id in range(798):
         else:
             if gt_cls != pred_cls:
                 FP += 1
-        torch.save(save_dict, save_path)
+        if save_dict['valid']:
+            torch.save(save_dict, save_path)
 
         prec = TP * 1.0 / (TP + FP + 1e-6)
         coverage = TP * 1.0 / (FN + TP + 1e-6)

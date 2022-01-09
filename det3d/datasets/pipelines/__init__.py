@@ -19,6 +19,7 @@ from .obj_tracking import ObjTracking
 from .temporal_clustering import TemporalClustering
 from .motion_clustering import MotionClustering
 from .compute_stats import ComputeStats
+from .trace_random_rotation import TraceRandomRotation
 
 __all__ = [
     "Compose",

@@ -85,27 +85,19 @@ voxel_generator = dict(
 )
 
 train_pipeline = [
-     dict(type="LoadTracesFromFile", dataset=dataset_type),
-     dict(type="LoadTraceAnnotations"),
-#    dict(type="LoadPointCloudFromFile", dataset=dataset_type),
-#    dict(type="LoadPointCloudAnnotations", with_bbox=True),
-#    dict(type="LoadMotionMasks", seq_interval=9, frame_interval=None, granularity='point'),
-#    dict(type="Preprocess", cfg=train_preprocessor),
-#    dict(type="Voxelization", cfg=voxel_generator),
-#    dict(type="AssignLabel", cfg=train_cfg["assigner"]),
+    dict(type="LoadTracesFromFile", dataset=dataset_type),
+    dict(type="LoadTraceAnnotations"),
+    dict(type="TraceRandomRotation"),
     dict(type="ReformatTrace"),
 ]
 test_pipeline = [
-#    dict(type="LoadPointCloudFromFile", dataset=dataset_type),
-#    dict(type="LoadPointCloudAnnotations", with_bbox=True),
-#    dict(type="Preprocess", cfg=val_preprocessor),
-#    dict(type="Voxelization", cfg=voxel_generator),
-#    dict(type="AssignLabel", cfg=train_cfg["assigner"]),
-#    dict(type="Reformat"),
+    dict(type="LoadTracesFromFile", dataset=dataset_type),
+    dict(type="LoadTraceAnnotations"),
+    dict(type="ReformatTrace"),
 ]
 
 train_anno = "data/Waymo/infos_train_trace_classifier.pkl"
-val_anno = "data/Waymo/infos_val_trace_classifier.pkl"
+val_anno = "data/Waymo/infos_train_trace_classifier.pkl"
 test_anno = None
 
 data = dict(
@@ -118,7 +110,8 @@ data = dict(
         ann_file=train_anno,
         class_names=class_names,
         pipeline=train_pipeline,
-        load_interval=10,
+        load_interval=1,
+        num_samples=20000,
     ),
     val=dict(
         type=dataset_type,
@@ -128,6 +121,7 @@ data = dict(
         ann_file=val_anno,
         class_names=class_names,
         pipeline=test_pipeline,
+        load_interval=1,
     ),
     test=dict(
         type=dataset_type,
@@ -149,7 +143,7 @@ lr_config = dict(
     type="one_cycle", lr_max=0.003, moms=[0.95, 0.85], div_factor=10.0, pct_start=0.4,
 )
 
-checkpoint_config = dict(interval=1)
+checkpoint_config = dict(interval=10)
 # yapf:disable
 log_config = dict(
     interval=100,
@@ -160,7 +154,7 @@ log_config = dict(
 )
 # yapf:enable
 # runtime settings
-total_epochs = 120
+total_epochs = 240
 device_ids = range(8)
 dist_params = dict(backend="nccl", init_method="env://")
 log_level = "INFO"

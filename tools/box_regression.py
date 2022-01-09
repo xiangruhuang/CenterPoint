@@ -8,13 +8,20 @@ from torch_scatter import scatter
 from det3d.ops.iou3d_nms import iou3d_nms_utils 
 from det3d.core.bbox import box_np_ops
 import math
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--gpus', type=int)
+parser.add_argument('--split', type=int)
+parser.add_argument('--cls', type=int, default=0)
+args = parser.parse_args()
 
 trace_files = glob.glob('data/Waymo/train/traces2/*.pt')
 with open('work_dirs/waymo_trace_classifer_training/prediction.pkl', 'rb') as fin:
     prediction = pickle.load(fin)
 
 #vis = Visualizer([], [])
-cls = 1
+cls = args.cls
 box_size = {0: torch.tensor([4.8557, 2.1343, 1.7822]),
             1: torch.tensor([0.9858, 0.8887, 1.7669]),
             2: torch.tensor([1.8623, 0.8435, 1.7970])}
@@ -32,7 +39,6 @@ elif cls == 0:
     weight_smooth = 0.1
     origin0 = torch.tensor([0, 0, -0.5], dtype=torch.float64)
 
-box_sizes = []
 def away_from_origin(points, corners, origins, classes):
     """Move box corners so that points are in the box and box is away from origin.
     
@@ -117,6 +123,9 @@ iou_thresholds = np.array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8])
 num_total = 0
 num_accurate = np.array([0 for th in iou_thresholds])
 for trace_file in trace_files:
+    seq_id = int(trace_file.split('/')[-1].split('.')[0].split('_')[1])
+    if seq_id % args.gpus != args.split:
+        continue
     token = trace_file.split('/')[-1].split('.')[0]
     trace = torch.load(trace_file)
     pred = prediction[token]
@@ -215,6 +224,10 @@ for trace_file in trace_files:
         for ii, iou_threshold in enumerate(iou_thresholds):
             num_accurate[ii] += (ious > iou_threshold).float().sum()
         print(f'iou acc={num_accurate/num_total}')
+        trace_id = int(trace_file.split('/')[-1].split('.')[0].split('_')[3])
+        box_save_path = f'data/Waymo/train/boxes/seq_{seq_id:03d}_trace_{trace_id:06d}.pt'
+        print(f'saving to {box_save_path}')
+        torch.save(pred_boxes, box_save_path)
 
         #vis.boxes('shifted-pred', pred_corners, trace['classes'], enabled=True)
         #vis.pointcloud('points', trace['points'][:, :3], radius=2e-3)

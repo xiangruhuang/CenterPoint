@@ -302,7 +302,7 @@ class LoadTraceAnnotations(object):
     def __call__(self, res, info):
         if res["type"] == 'WaymoTraceDataset':
             data = torch.load(info['path'])
-            cls = data['cls']
+            cls = data['gt_cls']
             if isinstance(cls, float):
                 cls = torch.tensor(cls, dtype=torch.long)
             if isinstance(cls, int):

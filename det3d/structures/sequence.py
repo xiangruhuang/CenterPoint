@@ -1,8 +1,12 @@
 import numpy as np
 from .frame import Frame, get_frame_id
+import multiprocessing.pool
+import time
+from det3d.core.bbox import box_np_ops
+from det3d.core.bbox.geometry import points_in_convex_polygon_3d_jit
 
 class Sequence:
-    def __init__(self, info, dtype=np.float64):
+    def __init__(self, info, dtype=np.float64, no_points=False):
         frame_paths = [info['path']]
         for s in info['sweeps']:
             frame_paths.append(s['path'])
@@ -13,13 +17,17 @@ class Sequence:
         self.seq_id = int(info['path'].split('/')[-1].split('_')[1])
         self.frames = []
         self.dtype = dtype
-        for frame_path in frame_paths:
-            try:
-                self.frames.append(Frame(frame_path, dtype=self.dtype))
-            except Exception as e:
-                print(e)
-                import ipdb; ipdb.set_trace()
-                pass
+        pool = multiprocessing.pool.ThreadPool(processes=8)
+        self.frames = pool.map(lambda x : Frame(x, self.dtype, no_points), frame_paths, chunksize=100)
+        pool.close()
+
+        #for frame_path in frame_paths:
+        #    try:
+        #        self.frames.append(Frame(frame_path, dtype=self.dtype))
+        #    except Exception as e:
+        #        print(e)
+        #        import ipdb; ipdb.set_trace()
+        #        pass
    
     def toglobal(self):
         for frame in self.frames:
@@ -198,4 +206,50 @@ class Sequence:
             mask_i = mask[offset:(offset+num_points)]
             f.filter(mask_i)
             offset += num_points
+
+    def points_in_box(self, tokens=None):
+        points = []
+        for frame in self.frames:
+            p = frame.points_in_box(tokens=tokens)
+            frame_id = np.ones((p.shape[0], 1)) * frame.frame_id
+            p = np.concatenate([p, frame_id], axis=-1)
+            points.append(p)
         
+        points = np.concatenate(points, axis=0)
+        return points
+
+    def points_in_moving_boxes(self):
+        trace_dict = {}
+        for f in self.frames:
+            surfaces = box_np_ops.corner_to_surfaces_3d(f.corners)
+            indices = points_in_convex_polygon_3d_jit(f.points[:, :3], surfaces)
+            num_points_in_boxes = indices.astype(np.int32).sum(0)
+            for box_id, token in enumerate(f.tokens):
+                cls = f.classes[box_id]
+                if trace_dict.get(token, None) is None:
+                    trace_dict[token] = []
+                box_dict = dict(frame_id = f.frame_id,
+                                corners = f.corners[box_id],
+                                cls = f.classes[box_id],
+                                num_points = num_points_in_boxes[box_id])
+                trace_dict[token].append(box_dict)
+
+        moving_tokens = []
+        for token in trace_dict.keys():
+            box_trace = trace_dict[token]
+            abs_travel_dist = 0
+            cls = box_trace[0]['cls']
+
+            # check if moving
+            for i in range(1, len(box_trace)):
+                last_box = box_trace[i-1]
+                box = box_trace[i]
+                abs_travel_dist += np.linalg.norm(
+                                       last_box['corners'] - box['corners'],
+                                       ord=2, axis=-1).mean()
+
+            if (abs_travel_dist > 1.5):
+                moving_tokens.append(token)
+        
+        print(moving_tokens)
+        return self.points_in_box(moving_tokens)

@@ -1,6 +1,7 @@
 import pickle
 import numpy as np
 from det3d.core.bbox import box_np_ops
+from det3d.core.bbox.geometry import points_in_convex_polygon_3d_jit
 import torch
 import open3d as o3d
 
@@ -12,12 +13,16 @@ def get_frame_id(path):
     return int(path.split('/')[-1].split('.')[0].split('_')[3])
 
 class Frame:
-    def __init__(self, path, dtype=np.float64):
+    def __init__(self, path, dtype=np.float64, no_points=False):
         self.path = path
         self.dtype = dtype
         self.frame_id = get_frame_id(path)
         self.load_annos()
-        self.load_points()
+        if not no_points:
+            self.load_points()
+        else:
+            self.points = np.zeros((0, 3)).astype(dtype)
+            self.normals = np.zeros((0, 3)).astype(dtype)
         self.pose = np.eye(4).astype(self.dtype)
         self.camera_loc = np.zeros(3).astype(self.dtype)
     
@@ -101,3 +106,18 @@ class Frame:
         self.points = self.points[mask]
         self.feats = self.feats[mask]
         self.normals = self.normals[mask]
+
+    def points_in_box(self, tokens = None):
+        if tokens is not None:
+            sel_indices = []
+            for i, token in enumerate(self.tokens):
+                if token in tokens:
+                    sel_indices.append(i)
+            sel_indices = np.array(sel_indices).astype(np.int32)
+        else:
+            sel_indices = np.arange(self.corners.shape[0])
+        
+        surfaces = box_np_ops.corner_to_surfaces_3d(self.corners[sel_indices])
+        indices = points_in_convex_polygon_3d_jit(self.points[:, :3], surfaces)
+        return self.points[indices.any(axis=-1)]
+

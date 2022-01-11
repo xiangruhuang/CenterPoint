@@ -25,12 +25,12 @@ class TraceClassifier(SimpleClassifier):
         if return_loss:
             return self.loss(example, preds)
         else:
-            return self.predict(example, preds, self.test_cfg)
+            return self.predict(example, preds)
 
     def loss(self, example, preds):
         gt_labels = example['classes'].to(preds.device).long()
         loss = F.nll_loss(preds, gt_labels,
-                          weight=torch.tensor([1.0,1.0,10.0,1.0]).to(preds.device))
+                          weight=torch.tensor([0.1,0.1,2.0,0.1]).to(preds.device))
         loss_dict = dict()
         loss_dict['loss'] = [loss,
                              loss,
@@ -60,5 +60,9 @@ class TraceClassifier(SimpleClassifier):
         return loss_dict
 
     def predict(self, example, preds):
-        pass
+        predictions = []
+        for i, (pred, metadata) in enumerate(zip(preds, example["metadata"])):
+            pred_dict = dict(pred=pred, metadata=metadata)
+            predictions.append(pred_dict)
+        return predictions
 

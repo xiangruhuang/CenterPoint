@@ -314,21 +314,19 @@ if __name__ == '__main__':
         if gt_cls == 3:
             continue
         gt_boxes = trace['boxes']
+        gt_corners = trace['corners']
         box_frame_ids = trace['box_frame_ids']
         points = trace['points']
         num_failure = 0
         valid_mask = torch.zeros(box_frame_ids.long().max().item()+1, dtype=torch.bool)
         for f, frame_id in enumerate(box_frame_ids):
-            gt_boxes_f = gt_boxes[box_frame_ids == frame_id].numpy()
-            if gt_boxes_f.shape[0] == 0:
+            gt_corners_f = gt_corners[box_frame_ids == frame_id].numpy()
+            surfaces = box_np_ops.corner_to_surfaces_3d(gt_corners_f)
+            mask_f = points[:, -1] == frame_id
+            indices = points_in_convex_polygon_3d_jit(points[mask_f, :3].numpy(), surfaces)
+            if indices.any(-1).sum() / points[mask_f, :3].shape[0] < 0.7:
                 continue
-            gt_corners = box_np_ops.center_to_corner_box3d(gt_boxes_f[:, :3], gt_boxes_f[:, 3:6], -gt_boxes_f[:, -1], axis=2)
-            surfaces = box_np_ops.corner_to_surfaces_3d(gt_corners)
-            mask = points[:, -1] == frame_id
-            indices = points_in_convex_polygon_3d_jit(points[mask, :3].numpy(), surfaces)
-            if indices.any(-1).sum() / points[mask, :3].shape[0] < 0.7:
-                continue
-            valid_mask[frame_id] = True
+            valid_mask[frame_id.long()] = True
         
         mask = valid_mask[box_frame_ids.long()]
         print('#valid', mask.sum(), 'total', mask.shape[0])

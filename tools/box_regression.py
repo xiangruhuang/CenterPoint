@@ -3,15 +3,12 @@ import torch
 import glob
 
 import pickle
-from det3d.core.utils.visualization import Visualizer
 from torch_scatter import scatter
 from det3d.ops.iou3d_nms import iou3d_nms_utils 
 from det3d.core.bbox import box_np_ops
 from det3d.core.bbox.geometry import points_in_convex_polygon_3d_jit
 import math
 import argparse
-
-vis = Visualizer([], [])
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -290,6 +287,9 @@ class BoxInference:
 if __name__ == '__main__':
     args = parse_args()
     print(args)
+    if args.visualize:
+        from det3d.core.utils.visualization import Visualizer
+        vis = Visualizer([], [])
     
     box_inference = BoxInference()
 

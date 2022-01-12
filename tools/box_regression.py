@@ -12,7 +12,7 @@ import argparse
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--seq_id', type=int)
+    #parser.add_argument('--seq_id', type=int)
     parser.add_argument('--visualize', action='store_true')
     parser.add_argument('--split', type=int, default=0)
     parser.add_argument('--gpus', type=int, default=1)
@@ -147,7 +147,7 @@ class BoxInference:
                         2: torch.tensor([0, 0, 25], dtype=torch.float64),
                        }
 
-    def infer(self, trace, cls, trace_id, args):
+    def infer(self, trace, cls, trace_id, args, seq_id):
         """Infer box attributes given a trace and its class.
         
         """
@@ -221,7 +221,7 @@ class BoxInference:
         # load frame transformation to world coordinate system
         transf = torch.zeros(num_frames, 4, 4, dtype=torch.float64)
         for frame_id in range(min_frame_id, max_frame_id+1):
-            with open(f'data/Waymo/train/annos/seq_{args.seq_id}_frame_{frame_id}.pkl', 'rb') as fin:
+            with open(f'data/Waymo/train/annos/seq_{seq_id}_frame_{frame_id}.pkl', 'rb') as fin:
                 annos = pickle.load(fin)
             T = annos['veh_to_global'].reshape(4, 4)
             T = torch.tensor(T, dtype=torch.float64)
@@ -293,7 +293,7 @@ if __name__ == '__main__':
     
     box_inference = BoxInference()
 
-    trace_files = glob.glob(f'data/Waymo/train/traces2/seq_{args.seq_id:03d}_trace_*.pt')
+    trace_files = glob.glob(f'data/Waymo/train/traces2/seq_*_trace_*.pt')
     trace_files = sorted(trace_files)
     #with open('work_dirs/waymo_trace_classifer_training/prediction.pkl', 'rb') as fin:
     #    prediction = pickle.load(fin)
@@ -308,11 +308,10 @@ if __name__ == '__main__':
         token = trace_file.split('/')[-1].split('.')[0]
         trace = torch.load(trace_file)
         trace_id = int(trace_file.split('/')[-1].split('.')[0].split('_')[-1])
+        seq_id = int(trace_file.split('/')[-1].split('.')[0].split('_')[1])
         #pred = prediction[token]
         gt_cls = trace['gt_cls']
         if gt_cls == 3:
-            continue
-        if trace_id != 49:
             continue
         gt_boxes = trace['boxes']
         box_frame_ids = trace['box_frame_ids']
@@ -332,6 +331,7 @@ if __name__ == '__main__':
             valid_mask[frame_id] = True
         
         mask = valid_mask[box_frame_ids.long()]
+        print('#valid', mask.sum(), 'total', mask.shape[0])
         frame_ids = trace['points'][:, -1].long()
         trace['points'] = trace['points'][valid_mask[frame_ids]]
         trace['boxes'] = trace['boxes'][mask]
@@ -342,7 +342,7 @@ if __name__ == '__main__':
         if mask.sum() < 10:
             continue
 
-        corners, gt_corners, boxes = box_inference.infer(trace, gt_cls.long().item(), trace_id, args)
+        corners, gt_corners, boxes = box_inference.infer(trace, gt_cls.long().item(), trace_id, args, seq_id)
         box_dict = dict(corners=corners, gt_corners=gt_corners, boxes=boxes)
         torch.save(box_dict, trace_file.replace('traces2', 'boxes').replace('trace', 'box'))
         points_.append(trace['points'])

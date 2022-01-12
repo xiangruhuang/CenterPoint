@@ -3,14 +3,11 @@ import torch
 import glob
 
 import pickle
-from det3d.core.utils.visualization import Visualizer
 from torch_scatter import scatter
 from det3d.ops.iou3d_nms import iou3d_nms_utils 
 from det3d.core.bbox import box_np_ops
 import math
 import argparse
-
-vis = Visualizer([], [])
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -282,6 +279,9 @@ class BoxInference:
 if __name__ == '__main__':
     args = parse_args()
     print(args)
+    if args.visualize:
+        from det3d.core.utils.visualization import Visualizer
+        vis = Visualizer([], [])
     
     box_inference = BoxInference()
 
@@ -303,10 +303,10 @@ if __name__ == '__main__':
         gt_cls = trace['gt_cls']
         if gt_cls == 3:
             continue
-        if trace_id == 32:
-            continue
-        if trace_id == 49:
-            continue
+        #if trace_id == 32:
+        #    continue
+        #if trace_id == 49:
+        #    continue
         corners, gt_corners, boxes = box_inference.infer(trace, gt_cls.long().item(), trace_id, args)
         box_dict = dict(corners=corners, gt_corners=gt_corners, boxes=boxes)
         torch.save(box_dict, trace_file.replace('traces2', 'boxes').replace('trace', 'box'))

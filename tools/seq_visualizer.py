@@ -64,8 +64,13 @@ if __name__ == '__main__':
         classes = trace['classes']
         if trace['gt_cls'] == 3:
             continue
-        vis.pointcloud(f'points-{i}', points[:, :3], color=[1, 0, 0])
-        vis.boxes(f'box-{i}', corners, classes)
+        trace_id = int(trace_file.split('/')[-1].split('.')[0].split('_')[-1])
+        if trace_id == 49:
+            continue
+        if trace_id == 32:
+            continue
+        #vis.pointcloud(f'points-{trace_id}', points[:, :3], color=[1, 0, 0])
+        #vis.boxes(f'box-{trace_id}', corners, classes)
         points_.append(points[:, :3])
         corners_.append(corners)
         classes_.append(classes)

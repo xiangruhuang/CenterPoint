@@ -16,8 +16,8 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--seq_id', type=int)
     parser.add_argument('--visualize', action='store_true')
-    parser.add_argument('--split', type=int)
-    parser.add_argument('--gpus', type=int)
+    parser.add_argument('--split', type=int, default=0)
+    parser.add_argument('--gpus', type=int, default=1)
 
     args = parser.parse_args()
 
@@ -64,6 +64,9 @@ def away_from_origin(points, corners, origins, classes, cls):
     weight = torch.tensor([10, 10, 30.0]).cuda()
     from_origins = (corners.mean(1) - origins)
     from_origins = from_origins / from_origins.norm(p=2, dim=-1).unsqueeze(-1)
+    if args.visualize:
+        ps_ori = vis.trace('center-trace', corners.mean(1).detach().cpu().numpy())
+        ps_ori.add_vector_quantity('from origin', from_origins.detach().cpu().numpy())
 
     for itr in range(8000):
         optimizer.zero_grad()
@@ -89,7 +92,7 @@ def away_from_origin(points, corners, origins, classes, cls):
         if cls != 0:
             loss_boundary = shifts[0, :2].square().sum() + shifts[-1, :2].square().sum()
         else:
-            loss_boundary = (shifts[0, :2] - shifts[-1, :2]).square().sum()
+            loss_boundary = torch.tensor(0.0) #0.0 (shifts[0, :2] - shifts[-1, :2]).square().sum()
 
         loss = loss_away + loss_in_box + weight_smooth*loss_smooth + num_frames*loss_boundary
         loss.backward()
@@ -108,6 +111,9 @@ def away_from_origin(points, corners, origins, classes, cls):
         
 
     #vis.boxes('box', shifted_corners.detach().cpu(), classes.cpu())
+    if cls == 0:
+        shifts = shifts.detach().cpu()
+        shifts[:, 2] -= 0.5
 
     return shifts.detach().cpu()
 
@@ -181,12 +187,13 @@ class BoxInference:
         heading_angle_opt = torch.nn.Parameter(torch.tensor(heading_angle_in_world))
         optimizer = torch.optim.Adam([heading_angle_opt], lr=1e-2)
         weight = torch.ones(num_frames, dtype=torch.float64)
-        median_angle = np.median(heading_angle_in_world)
-        median_dir = np.array([np.cos(median_angle), np.sin(median_angle)])
-        median_dir = torch.tensor(median_dir)
-        dist = (heading_dir_in_world[:, :2] - median_dir).square().sum(-1)
-        weight = (-dist).exp()
-        weight[dist > 0.001] = 0.0001
+        #median_angle = np.median(heading_angle_in_world)
+        #median_dir = np.array([np.cos(median_angle), np.sin(median_angle)])
+        #median_dir = torch.tensor(median_dir)
+        #dist = (heading_dir_in_world[:, :2] - median_dir).square().sum(-1)
+        #weight = (-dist).exp()
+        #weight[dist > 0.001] = 0.0001
+        import ipdb; ipdb.set_trace()
         for itr in range(10000):
             optimizer.zero_grad()
             cos = heading_angle_opt.cos()
@@ -197,21 +204,21 @@ class BoxInference:
 
             loss0 = (((hdir * heading_dir_in_world[:, :2]).sum(-1) - 1.0).square()*weight).sum()
 
-            loss1 = (((hdir[1:] * hdir[:-1]).sum(-1) - 1)).square().sum()
-            loss2 = (((hdir[5:] * hdir[:-5]).sum(-1) - 1)).square().sum()
+            velo = hdir[1:] - hdir[:-1]
+            loss1 = (velo[1:] - velo[:-1]).square().sum()
 
-            loss = 0.1*loss0 + loss1 + loss2
+            loss = 0.1*loss0 + loss1 
             loss.backward()
             optimizer.step()
             if (itr+1) % 1000 == 0: 
-                print(f'itr={itr}, loss={loss.item()}, smooth={loss2.item()}')
+                print(f'itr={itr}, loss={loss.item()}, smooth={loss1.item()}')
         heading_dir_in_world[:, :2] = hdir.detach()
         pred_corners_in_world = box_np_ops.center_to_corner_box3d(centers_in_world.numpy(),
                                                                   pred_boxes[:, 3:6].numpy(),
                                                                   -heading_angle_opt.detach().numpy(),
                                                                   axis=2)
-        #if args.visualize:
-        #    vis.boxes('box in world', pred_corners_in_world, trace['classes'])
+        if args.visualize:
+            vis.boxes('box in world', pred_corners_in_world, trace['classes'])
 
         # load frame transformation to world coordinate system
         transf = torch.zeros(num_frames, 4, 4, dtype=torch.float64)
@@ -294,6 +301,7 @@ if __name__ == '__main__':
     gt_corners_ = []
     points_, boxes_ = [], []
     for i, trace_file in enumerate(trace_files):
+        print(trace_file)
         if i % args.gpus != args.split:
             continue
         token = trace_file.split('/')[-1].split('.')[0]
@@ -302,10 +310,6 @@ if __name__ == '__main__':
         #pred = prediction[token]
         gt_cls = trace['gt_cls']
         if gt_cls == 3:
-            continue
-        if trace_id == 32:
-            continue
-        if trace_id == 49:
             continue
         corners, gt_corners, boxes = box_inference.infer(trace, gt_cls.long().item(), trace_id, args)
         box_dict = dict(corners=corners, gt_corners=gt_corners, boxes=boxes)

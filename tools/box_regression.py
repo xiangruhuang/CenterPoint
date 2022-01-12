@@ -7,6 +7,7 @@ from det3d.core.utils.visualization import Visualizer
 from torch_scatter import scatter
 from det3d.ops.iou3d_nms import iou3d_nms_utils 
 from det3d.core.bbox import box_np_ops
+from det3d.core.bbox.geometry import points_in_convex_polygon_3d_jit
 import math
 import argparse
 
@@ -311,6 +312,36 @@ if __name__ == '__main__':
         gt_cls = trace['gt_cls']
         if gt_cls == 3:
             continue
+        if trace_id != 49:
+            continue
+        gt_boxes = trace['boxes']
+        box_frame_ids = trace['box_frame_ids']
+        points = trace['points']
+        num_failure = 0
+        valid_mask = torch.zeros(box_frame_ids.long().max().item()+1, dtype=torch.bool)
+        for f, frame_id in enumerate(box_frame_ids):
+            gt_boxes_f = gt_boxes[box_frame_ids == frame_id].numpy()
+            if gt_boxes_f.shape[0] == 0:
+                continue
+            gt_corners = box_np_ops.center_to_corner_box3d(gt_boxes_f[:, :3], gt_boxes_f[:, 3:6], -gt_boxes_f[:, -1], axis=2)
+            surfaces = box_np_ops.corner_to_surfaces_3d(gt_corners)
+            mask = points[:, -1] == frame_id
+            indices = points_in_convex_polygon_3d_jit(points[mask, :3].numpy(), surfaces)
+            if indices.any(-1).sum() / points[mask, :3].shape[0] < 0.7:
+                continue
+            valid_mask[frame_id] = True
+        
+        mask = valid_mask[box_frame_ids.long()]
+        frame_ids = trace['points'][:, -1].long()
+        trace['points'] = trace['points'][valid_mask[frame_ids]]
+        trace['boxes'] = trace['boxes'][mask]
+        trace['classes'] = trace['classes'][mask]
+        trace['corners'] = trace['corners'][mask]
+        trace['box_frame_ids'] = trace['box_frame_ids'][mask]
+
+        if mask.sum() < 10:
+            continue
+
         corners, gt_corners, boxes = box_inference.infer(trace, gt_cls.long().item(), trace_id, args)
         box_dict = dict(corners=corners, gt_corners=gt_corners, boxes=boxes)
         torch.save(box_dict, trace_file.replace('traces2', 'boxes').replace('trace', 'box'))

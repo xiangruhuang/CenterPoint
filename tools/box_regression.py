@@ -191,7 +191,6 @@ class BoxInference:
         #dist = (heading_dir_in_world[:, :2] - median_dir).square().sum(-1)
         #weight = (-dist).exp()
         #weight[dist > 0.001] = 0.0001
-        import ipdb; ipdb.set_trace()
         for itr in range(10000):
             optimizer.zero_grad()
             cos = heading_angle_opt.cos()

@@ -340,7 +340,9 @@ if __name__ == '__main__':
             continue
 
         corners, gt_corners, boxes = box_inference.infer(trace, gt_cls.long().item(), trace_id, args, seq_id)
-        box_dict = dict(corners=corners, gt_corners=gt_corners, boxes=boxes)
+        box_frame_ids, classes = trace['box_frame_ids'], trace['classes']
+        box_dict = dict(corners=corners, gt_corners=gt_corners, boxes=boxes,
+                        box_frame_ids=box_frame_ids, classes=classes)
         torch.save(box_dict, trace_file.replace('traces2', 'boxes').replace('trace', 'box'))
         points_.append(trace['points'])
         corners_.append(corners)

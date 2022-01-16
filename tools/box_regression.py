@@ -318,14 +318,23 @@ if __name__ == '__main__':
         points = trace['points']
         num_failure = 0
         valid_mask = torch.zeros(box_frame_ids.long().max().item()+1, dtype=torch.bool)
+        travel_dist = 0.0
+        last_box_center = None
         for f, frame_id in enumerate(box_frame_ids):
             gt_corners_f = gt_corners[box_frame_ids == frame_id].numpy()
+            if last_box_center is not None:
+                box_center = gt_corners_f.mean(-2)
+                travel_dist = np.linalg.norm(box_center-last_box_center, ord=2) + travel_dist
+                last_box_center = box_center
             surfaces = box_np_ops.corner_to_surfaces_3d(gt_corners_f)
             mask_f = points[:, -1] == frame_id
             indices = points_in_convex_polygon_3d_jit(points[mask_f, :3].numpy(), surfaces)
             if indices.any(-1).sum() / points[mask_f, :3].shape[0] < 0.7:
                 continue
             valid_mask[frame_id.long()] = True
+        if travel_dist < 3.0:
+            print('static trace!')
+            continue
         
         mask = valid_mask[box_frame_ids.long()]
         print('#valid', mask.sum(), 'total', mask.shape[0])

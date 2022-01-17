@@ -308,6 +308,8 @@ if __name__ == '__main__':
         trace = torch.load(trace_file)
         trace_id = int(trace_file.split('/')[-1].split('.')[0].split('_')[-1])
         seq_id = int(trace_file.split('/')[-1].split('.')[0].split('_')[1])
+        if seq_id != 1 or trace_id != 16:
+            continue
         #pred = prediction[token]
         gt_cls = trace['gt_cls']
         if gt_cls == 3:
@@ -337,6 +339,8 @@ if __name__ == '__main__':
             continue
         
         mask = valid_mask[box_frame_ids.long()]
+        if trace_id != 16:
+            import ipdb; ipdb.set_trace()
         print('#valid', mask.sum(), 'total', mask.shape[0])
         frame_ids = trace['points'][:, -1].long()
         trace['points'] = trace['points'][valid_mask[frame_ids]]

@@ -325,7 +325,7 @@ if __name__ == '__main__':
             if last_box_center is not None:
                 box_center = gt_corners_f.mean(-2)
                 travel_dist = np.linalg.norm(box_center-last_box_center, ord=2) + travel_dist
-                last_box_center = box_center
+            last_box_center = box_center
             surfaces = box_np_ops.corner_to_surfaces_3d(gt_corners_f)
             mask_f = points[:, -1] == frame_id
             indices = points_in_convex_polygon_3d_jit(points[mask_f, :3].numpy(), surfaces)

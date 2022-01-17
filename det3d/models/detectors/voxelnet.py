@@ -35,6 +35,20 @@ class VoxelNet(SingleStageDetector):
         coordinates = example["coordinates"]
         num_points_in_voxel = example["num_points"]
         num_voxels = example["num_voxels"]
+        
+        #from det3d.core.utils.visualization import Visualizer
+        #vis = Visualizer([], [])
+
+        #v0 = voxels[coordinates[:, 0] == 0]
+        #vis.pointcloud('v0', v0[:, 0, :3].detach().cpu())
+        #gt_boxes_and_cls = example['gt_boxes_and_cls'][0]
+        #mask = gt_boxes_and_cls[:, -1] != 0
+        #gt_boxes = gt_boxes_and_cls[mask, :-1].detach().cpu().numpy()
+        #gt_cls = gt_boxes_and_cls[mask, -1].detach().cpu().long()
+        #from det3d.core.bbox import box_np_ops
+        #corners = box_np_ops.center_to_corner_box3d(gt_boxes[:, :3], gt_boxes[:, 3:6], gt_boxes[:, 6], axis=2)
+        #vis.boxes('box', corners, gt_cls)
+        #vis.show()
 
         batch_size = len(num_voxels)
 

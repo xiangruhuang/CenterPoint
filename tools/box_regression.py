@@ -311,8 +311,6 @@ if __name__ == '__main__':
         trace = torch.load(trace_file)
         trace_id = int(trace_file.split('/')[-1].split('.')[0].split('_')[-1])
         seq_id = int(trace_file.split('/')[-1].split('.')[0].split('_')[1])
-        if seq_id != 1 or trace_id != 16:
-            continue
         #pred = prediction[token]
         gt_cls = trace['gt_cls']
         if gt_cls == 3:

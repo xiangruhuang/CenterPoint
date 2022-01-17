@@ -322,8 +322,8 @@ if __name__ == '__main__':
         last_box_center = None
         for f, frame_id in enumerate(box_frame_ids):
             gt_corners_f = gt_corners[box_frame_ids == frame_id].numpy()
+            box_center = gt_corners_f.mean(-2)
             if last_box_center is not None:
-                box_center = gt_corners_f.mean(-2)
                 travel_dist = np.linalg.norm(box_center-last_box_center, ord=2) + travel_dist
             last_box_center = box_center
             surfaces = box_np_ops.corner_to_surfaces_3d(gt_corners_f)

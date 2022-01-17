@@ -170,6 +170,8 @@ class BoxInference:
         # align box heading directions to smoothed velocity
         centers_in_world = scatter(points[:, :3], frame_ids, reduce='mean',
                                    dim=0, dim_size=num_frames)
+
+
         heading_dir_in_world = (centers_in_world[5:] - centers_in_world[:-5]).double()
         heading_dir_in_world = scatter(torch.cat([heading_dir_in_world, heading_dir_in_world], dim=0),
                                        torch.cat(
@@ -215,7 +217,8 @@ class BoxInference:
                                                                   -heading_angle_opt.detach().numpy(),
                                                                   axis=2)
         if args.visualize:
-            vis.boxes('box in world', pred_corners_in_world, trace['classes'])
+            vis.boxes('box in world', pred_corners_in_world[frame_ids.unique()], trace['classes'])
+            vis.show()
 
         # load frame transformation to world coordinate system
         transf = torch.zeros(num_frames, 4, 4, dtype=torch.float64)
@@ -258,8 +261,9 @@ class BoxInference:
             vis.boxes(f'gt-{trace_id}', gt_corners, trace['classes'])
         pred_boxes = torch.tensor(pred_boxes)
         if args.visualize:
-            vis.boxes(f'pred-{trace_id}', pred_corners_in_world, trace['classes'], enabled=False)
+            vis.boxes(f'pred-{trace_id}', pred_corners_in_world[frame_ids.unique()], trace['classes'], enabled=False)
         # shift away from origin
+
         shifts = away_from_origin(points, pred_corners_in_world, origins_in_world, trace['classes'], cls)
         pred_corners_in_world += shifts.unsqueeze(1)
         
@@ -273,7 +277,7 @@ class BoxInference:
         ious = torch.diag(iou3d_nms_utils.boxes_iou3d_gpu(pred_boxes.cuda().float(), torch.tensor(gt_boxes).cuda().float()))
 
         if args.visualize:
-            vis.boxes(f'shifted-pred-{trace_id}', pred_corners_in_world, trace['classes'], enabled=True)
+            vis.boxes(f'shifted-pred-{trace_id}', pred_corners_in_world[frame_ids.unique()], trace['classes'], enabled=True)
             ps_p = vis.pointcloud(f'points-{trace_id}', trace['points'][:, :3], radius=2e-3)
             from_world_origins = points[:, :3] - origins_in_world[frame_ids]
             ps_p.add_vector_quantity('from origin', from_world_origins)
@@ -296,7 +300,6 @@ if __name__ == '__main__':
     trace_files = sorted(trace_files)
     #with open('work_dirs/waymo_trace_classifer_training/prediction.pkl', 'rb') as fin:
     #    prediction = pickle.load(fin)
-        
     corners_, classes_ = [], []
     gt_corners_ = []
     points_, boxes_ = [], []
@@ -308,6 +311,8 @@ if __name__ == '__main__':
         trace = torch.load(trace_file)
         trace_id = int(trace_file.split('/')[-1].split('.')[0].split('_')[-1])
         seq_id = int(trace_file.split('/')[-1].split('.')[0].split('_')[1])
+        if seq_id != 1 or trace_id != 16:
+            continue
         #pred = prediction[token]
         gt_cls = trace['gt_cls']
         if gt_cls == 3:
@@ -338,15 +343,14 @@ if __name__ == '__main__':
         
         mask = valid_mask[box_frame_ids.long()]
         print('#valid', mask.sum(), 'total', mask.shape[0])
-        frame_ids = trace['points'][:, -1].long()
-        trace['points'] = trace['points'][valid_mask[frame_ids]]
-        trace['boxes'] = trace['boxes'][mask]
-        trace['classes'] = trace['classes'][mask]
-        trace['corners'] = trace['corners'][mask]
-        trace['box_frame_ids'] = trace['box_frame_ids'][mask]
-
         if mask.sum() < 10:
             continue
+        frame_ids = trace['points'][:, -1].long()
+        #trace['points'] = trace['points'][valid_mask[frame_ids]]
+        #trace['boxes'] = trace['boxes'][mask]
+        #trace['classes'] = trace['classes'][mask]
+        #trace['corners'] = trace['corners'][mask]
+        #trace['box_frame_ids'] = trace['box_frame_ids'][mask]
 
         corners, gt_corners, boxes = box_inference.infer(trace, gt_cls.long().item(), trace_id, args, seq_id)
         box_frame_ids, classes = trace['box_frame_ids'], trace['classes']

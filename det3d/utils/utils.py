@@ -1,7 +1,6 @@
 import numpy as np
 import torch
 
-
 def example_to_device(
     example, dtype=torch.float32, device=None, non_blocking=True
 ) -> dict:

@@ -25,6 +25,14 @@ class Frame:
             self.normals = np.zeros((0, 3)).astype(dtype)
         self.pose = np.eye(4).astype(self.dtype)
         self.camera_loc = np.zeros(3).astype(self.dtype)
+
+    @classmethod
+    def from_index(cls, seq_id, frame_id,
+                   split='train',
+                   dtype=np.float64,
+                   no_points=False):
+        path = f'data/Waymo/{split}/lidar/seq_{seq_id}_frame_{frame_id}.pkl'
+        return cls(path, dtype=dtype, no_points=no_points)
     
     def transform(self, T):
         self.pose = T @ self.pose

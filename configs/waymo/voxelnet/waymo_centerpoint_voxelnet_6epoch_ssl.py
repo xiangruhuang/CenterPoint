@@ -84,16 +84,16 @@ db_sampler = dict(
     #enable=False,
     db_info_path="data/Waymo/dbinfos_train_ssl_1sweeps_withvelo.pkl",
     sample_groups=[
-        dict(VEHICLE=15),
-        dict(PEDESTRIAN=10),
-        dict(CYCLIST=10),
+        dict(VEHICLE=150),
+        dict(PEDESTRIAN=150),
+        dict(CYCLIST=150),
     ],
     db_prep_steps=[
         dict(
             filter_by_min_num_points=dict(
-                VEHICLE=150,
-                PEDESTRIAN=150,
-                CYCLIST=150,
+                VEHICLE=5,
+                PEDESTRIAN=5,
+                CYCLIST=5,
             )
         ),
         dict(filter_by_difficulty=[-1],),

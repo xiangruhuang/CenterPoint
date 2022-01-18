@@ -89,17 +89,17 @@ def create_groundtruth_database(
             # all of them into a single folder
             # we randomly sample a few objects for gt augmentation
             # We keep all cyclist as they are rare 
-            if index % 4 != 0:
-                mask = (names == 'VEHICLE') 
-                mask = np.logical_not(mask)
-                names = names[mask]
-                gt_boxes = gt_boxes[mask]
+            #if index % 4 != 0:
+            #    mask = (names == 'VEHICLE') 
+            #    mask = np.logical_not(mask)
+            #    names = names[mask]
+            #    gt_boxes = gt_boxes[mask]
 
-            if index % 2 != 0:
-                mask = (names == 'PEDESTRIAN')
-                mask = np.logical_not(mask)
-                names = names[mask]
-                gt_boxes = gt_boxes[mask]
+            #if index % 2 != 0:
+            #    mask = (names == 'PEDESTRIAN')
+            #    mask = np.logical_not(mask)
+            #    names = names[mask]
+            #    gt_boxes = gt_boxes[mask]
 
 
         group_dict = {}

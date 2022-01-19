@@ -50,7 +50,7 @@ train_pipeline = [
 ]
 
 train_anno = "data/Waymo/infos_train_sequences_filter_zero_gt.pkl"
-val_anno = "data/Waymo/infos_val_01sweeps_filter_zero_gt.pkl"
+val_anno = "data/Waymo/infos_train_01sweeps_filter_zero_gt.pkl"
 test_anno = None
 
 data = dict(

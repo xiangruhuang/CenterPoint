@@ -86,7 +86,7 @@ db_sampler = dict(
     sample_groups=[
         dict(VEHICLE=150),
         dict(PEDESTRIAN=150),
-        dict(CYCLIST=150),
+        dict(CYCLIST=50),
     ],
     db_prep_steps=[
         dict(
@@ -141,7 +141,7 @@ test_pipeline = [
 ]
 
 train_anno = "data/Waymo/infos_train_ssl_01sweeps_filter_zero_gt.pkl"
-val_anno = "data/Waymo/infos_val_01sweeps_filter_zero_gt.pkl"
+val_anno = "data/Waymo/infos_train_01sweeps_filter_zero_gt.pkl"
 test_anno = None
 
 data = dict(

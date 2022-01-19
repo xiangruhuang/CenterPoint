@@ -48,6 +48,10 @@ def parse_args():
         help="whether to save results to standard KITTI format of txt type",
     )
     parser.add_argument(
+        "--load_pred",
+        action='store_true',
+    )
+    parser.add_argument(
         "--gpus",
         type=int,
         default=1,
@@ -140,63 +144,76 @@ def main():
     mode = "val"
 
     logger.info(f"work dir: {args.work_dir}")
-    if cfg.local_rank == 0:
-        prog_bar = torchie.ProgressBar(len(data_loader.dataset) // cfg.gpus)
 
-    detections = {}
-    cpu_device = torch.device("cpu")
+    if not args.load_pred:
+        if cfg.local_rank == 0:
+            prog_bar = torchie.ProgressBar(len(data_loader.dataset) // cfg.gpus)
 
-    start = time.time()
+        detections = {}
+        cpu_device = torch.device("cpu")
 
-    start = int(len(dataset) / 3)
-    end = int(len(dataset) * 2 /3)
+        start = time.time()
 
-    time_start = 0 
-    time_end = 0 
+        start = int(len(dataset) / 3)
+        end = int(len(dataset) * 2 /3)
+        time_start = 0 
+        time_end = 0 
 
-    for i, data_batch in enumerate(data_loader):
-        if i == start:
-            torch.cuda.synchronize()
-            time_start = time.time()
+        for i, data_batch in enumerate(data_loader):
+            if i == start:
+                torch.cuda.synchronize()
+                time_start = time.time()
 
-        if i == end:
-            torch.cuda.synchronize()
-            time_end = time.time()
+            if i == end:
+                torch.cuda.synchronize()
+                time_end = time.time()
 
-        with torch.no_grad():
-            outputs = batch_processor(
-                model, data_batch, train_mode=False, local_rank=args.local_rank,
-            )
-        for output in outputs:
-            token = output["metadata"]["token"]
-            for k, v in output.items():
-                if k not in [
-                    "metadata",
-                ]:
-                    output[k] = v.to(cpu_device)
-            detections.update(
-                {token: output,}
-            )
-            if args.local_rank == 0:
-                prog_bar.update()
+            with torch.no_grad():
+                outputs = batch_processor(
+                    model, data_batch, train_mode=False, local_rank=args.local_rank,
+                )
+            for output in outputs:
+                token = output["metadata"]["token"]
+                for k, v in output.items():
+                    if k not in [
+                        "metadata",
+                    ]:
+                        output[k] = v.to(cpu_device)
+                detections.update(
+                    {token: output,}
+                )
+                if args.local_rank == 0:
+                    prog_bar.update()
 
-    synchronize()
+        synchronize()
 
-    all_predictions = all_gather(detections)
+        all_predictions = all_gather(detections)
 
-    print("\n Total time per frame: ", (time_end -  time_start) / (end - start))
+        print("\n Total time per frame: ", (time_end -  time_start) / (end - start))
 
     if args.local_rank != 0:
         return
 
-    predictions = {}
-    for p in all_predictions:
-        predictions.update(p)
+    if not args.load_pred:
+        predictions = {}
+        for p in all_predictions:
+            predictions.update(p)
 
-    if not os.path.exists(args.work_dir):
-        os.makedirs(args.work_dir)
+        if not os.path.exists(args.work_dir):
+            os.makedirs(args.work_dir)
 
-    save_pred(predictions, args.work_dir)
+        save_pred(predictions, args.work_dir)
+    else:
+        print('loading prediction')
+        with open(f'{args.work_dir}/prediction.pkl', 'rb') as fin:
+            predictions = pickle.load(fin)
+        for key, pred in predictions.items():
+            scores = pred['scores']
+            mask = scores > 0.3
+            pred['scores'] = pred['scores'][mask]
+            pred['box3d_lidar'] = pred['box3d_lidar'][mask]
+            pred['label_preds'] = pred['label_preds'][mask]
+            predictions[key] = pred
 
     result_dict, _ = dataset.evaluation(copy.deepcopy(predictions), output_dir=args.work_dir, testset=args.testset)
 

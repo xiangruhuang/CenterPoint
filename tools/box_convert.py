@@ -12,6 +12,7 @@ import math
 import argparse
 from det3d.structures import Sequence, Frame
 from tqdm import tqdm
+from boxes2annos import save_boxes_as_annos
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -136,7 +137,7 @@ if __name__ == '__main__':
     #with open('data/Waymo/infos_train_sequences_filter_zero_gt.pkl', 'rb') as fin:
     #    infos = pickle.load(fin)
    
-    for i in range(662, 702):
+    for i in range(798):
         if i % args.gpus == args.split:
             args.seq_id = i
             convert_box_annos(args)

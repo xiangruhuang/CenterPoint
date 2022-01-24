@@ -84,9 +84,9 @@ db_sampler = dict(
     #enable=False,
     db_info_path="data/Waymo/dbinfos_train_ssl_1sweeps_withvelo.pkl",
     sample_groups=[
-        dict(VEHICLE=150),
-        dict(PEDESTRIAN=150),
-        dict(CYCLIST=150),
+        dict(VEHICLE=70),
+        dict(PEDESTRIAN=50),
+        dict(CYCLIST=50),
     ],
     db_prep_steps=[
         dict(

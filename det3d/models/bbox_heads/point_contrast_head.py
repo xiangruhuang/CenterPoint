@@ -261,6 +261,8 @@ class PointContrastHead(nn.Module):
         for i in range(batch_size):
             rot_xy = (xy.float() @ R[i]).long()
             valid_mask = ((rot_xy < size).all(-1) & (rot_xy >= 0).all(-1))
+            valid_mask = torch.where(valid_mask)[0]
+            valid_mask = valid_mask[torch.randperm(valid_mask.shape[0])[:1000].to(valid_mask)]
             rand_xy = xy[torch.randperm(xy.shape[0]), :]
             dist_pos = x[i][(xy[valid_mask, 0], xy[valid_mask, 1])] - x[i+bs][(rot_xy[valid_mask, 0], rot_xy[valid_mask, 1])]
             dist_pos = dist_pos.square().sum(-1)

@@ -17,7 +17,7 @@ class Preprocessor(nn.Module):
         
         coors = torch.zeros(points.shape[0], 4).to(batch)
         coors[:, 0] = batch + batch_size
-        coors[:, 1:] = ((points[:, 0, :3] - pc_range[:3]) // voxel_size).flip(-1)
+        coors[:, 1:] = torch.div(points[:, 0, :3] - pc_range[:3], voxel_size, rounding_mode='floor').flip(-1)
 
         return coors
 

@@ -14,10 +14,13 @@ target_assigner = dict(
     tasks=tasks,
 )
 
+rotate_and_duplicate = True
+
 # model settings
 model = dict(
-    type="VoxelNet",
+    type="VoxelNetExt",
     pretrained=None,
+    preprocessor=dict(type="Preprocessor", voxel_size=[0.1, 0.1, 0.15], pc_range=[-75.2, -75.2, -2, 75.2, 75.2, 4]),
     reader=dict(
         type="VoxelFeatureExtractorV3",
         num_input_features=5,
@@ -121,6 +124,7 @@ voxel_generator = dict(
     voxel_size=[0.1, 0.1, 0.15],
     max_points_in_voxel=5,
     max_voxel_num=150000,
+    rotate_and_duplicate=rotate_and_duplicate,
 )
 
 train_pipeline = [
@@ -128,6 +132,7 @@ train_pipeline = [
     dict(type="LoadPointCloudAnnotations", with_bbox=True),
     dict(type="Preprocess", cfg=train_preprocessor),
     dict(type="Voxelization", cfg=voxel_generator),
+    #dict(type="RotateAndDuplicate", cfg=voxel_generator),
     dict(type="AssignLabel", cfg=train_cfg["assigner"]),
     dict(type="Reformat"),
 ]
@@ -145,8 +150,8 @@ val_anno = "data/Waymo/infos_val_01sweeps_filter_zero_gt.pkl"
 test_anno = None
 
 data = dict(
-    samples_per_gpu=4,
-    workers_per_gpu=4,
+    samples_per_gpu=2,
+    workers_per_gpu=2,
     train=dict(
         type=dataset_type,
         root_path=data_root,
@@ -192,7 +197,7 @@ lr_config = dict(
 checkpoint_config = dict(interval=1)
 # yapf:disable
 log_config = dict(
-    interval=5,
+    interval=1,
     hooks=[
         dict(type="TextLoggerHook"),
         # dict(type='TensorboardLoggerHook')
@@ -200,7 +205,7 @@ log_config = dict(
 )
 # yapf:enable
 # runtime settings
-total_epochs = 6
+total_epochs = 3
 device_ids = range(8)
 dist_params = dict(backend="nccl", init_method="env://")
 log_level = "INFO"

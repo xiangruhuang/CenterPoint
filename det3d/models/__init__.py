@@ -14,9 +14,11 @@ from .builder import (
     build_neck,
     build_roi_head,
     build_classifier,
+    build_preprocessor,
 )
 from .detectors import *  # noqa: F401,F403
 from .classifiers import *
+from .preprocessors import *
 from .necks import *  # noqa: F401,F403
 from .readers import *
 from .registry import (
@@ -27,6 +29,7 @@ from .registry import (
     NECKS,
     READERS,
     CLASSIFIERS,
+    PREPROCESSORS,
 )
 from .second_stage import * 
 from .roi_heads import * 
@@ -45,4 +48,5 @@ __all__ = [
     "build_loss",
     "build_detector",
     "build_classifier",
+    "build_preprocessor",
 ]

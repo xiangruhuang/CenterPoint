@@ -236,53 +236,41 @@ class PointContrastHead(nn.Module):
 
         logger.info("Finish CenterHead Initialization")
 
-    def forward(self, x, *kwargs):
-        import ipdb; ipdb.set_trace()
-        ret_dicts = []
-
-        x = self.shared_conv(x)
-
-        for task in self.tasks:
-            ret_dicts.append(task(x))
-
-        return ret_dicts
+    def forward(self, res_dict, *kwargs):
+        preds = dict(
+            x=res_dict['x'],
+            voxel_feature=res_dict['voxel_feature'],
+            thetas=res_dict['thetas'],
+        )
+        return preds 
 
     def _sigmoid(self, x):
         y = torch.clamp(x.sigmoid_(), min=1e-4, max=1-1e-4)
         return y
 
-    def loss(self, example, preds_dicts, **kwargs):
+    def loss(self, example, pred_dicts, **kwargs):
+        x = pred_dicts['x'].transpose(1, -1)
+        voxel_feature = pred_dicts['voxel_feature']
+        thetas = pred_dicts['thetas']
+        size = x.shape[2]
+        R = torch.stack([thetas.cos(), -thetas.sin(), thetas.sin(), thetas.cos()], dim=0).view(-1, 2, 2).to(x)
+        xy = torch.stack(torch.meshgrid(torch.arange(size), torch.arange(size)), dim=-1).to(x.device).view(-1, 2)
+        bs = batch_size = x.shape[0] // 2
+        m1, m2 = 0.1, 1.4
         rets = []
-        for task_id, preds_dict in enumerate(preds_dicts):
-            # heatmap focal loss
-            preds_dict['hm'] = self._sigmoid(preds_dict['hm'])
-            
-            hm_loss = self.crit(preds_dict['hm'], example['hm'][task_id], example['ind'][task_id], example['mask'][task_id], example['cat'][task_id])
-
-            target_box = example['anno_box'][task_id]
-            # reconstruct the anno_box from multiple reg heads
-            if self.dataset in ['waymo', 'nuscenes']:
-                if 'vel' in preds_dict:
-                    preds_dict['anno_box'] = torch.cat((preds_dict['reg'], preds_dict['height'], preds_dict['dim'],
-                                                        preds_dict['vel'], preds_dict['rot']), dim=1)  
-                else:
-                    preds_dict['anno_box'] = torch.cat((preds_dict['reg'], preds_dict['height'], preds_dict['dim'],
-                                                        preds_dict['rot']), dim=1)   
-                    target_box = target_box[..., [0, 1, 2, 3, 4, 5, -2, -1]] # remove vel target                       
-            else:
-                raise NotImplementedError()
-
+        for i in range(batch_size):
+            rot_xy = (xy.float() @ R[i]).long()
+            valid_mask = ((rot_xy < size).all(-1) & (rot_xy >= 0).all(-1))
+            rand_xy = xy[torch.randperm(xy.shape[0]), :]
+            dist_pos = x[i][(xy[valid_mask, 0], xy[valid_mask, 1])] - x[i+bs][(rot_xy[valid_mask, 0], rot_xy[valid_mask, 1])]
+            dist_pos = dist_pos.square().sum(-1)
+            dist_pos = torch.max(dist_pos - m1, torch.zeros_like(dist_pos)).sum()
+            dist_neg = x[i][(xy[:, 0], xy[:, 1])] - x[i+bs][(rand_xy[:, 0], rand_xy[:, 1])]
+            dist_neg = dist_neg.square().sum(-1)
+            dist_neg = torch.max(m2 - dist_neg, torch.zeros_like(dist_neg)).sum()
+            loss = dist_pos + dist_neg
             ret = {}
- 
-            # Regression loss for dimension, offset, height, rotation            
-            box_loss = self.crit_reg(preds_dict['anno_box'], example['mask'][task_id], example['ind'][task_id], target_box)
-
-            loc_loss = (box_loss*box_loss.new_tensor(self.code_weights)).sum()
-            
-            loss = hm_loss + self.weight*loc_loss
-
-            ret.update({'loss': loss, 'hm_loss': hm_loss.detach().cpu(), 'loc_loss':loc_loss, 'loc_loss_elem': box_loss.detach().cpu(), 'num_positive': example['mask'][task_id].float().sum()})
-
+            ret.update({'loss': loss})
             rets.append(ret)
 
         """convert batch-key to key-batch

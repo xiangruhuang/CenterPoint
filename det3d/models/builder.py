@@ -10,7 +10,8 @@ from .registry import (
     NECKS,
     READERS,
     SECOND_STAGE,
-    ROI_HEAD
+    ROI_HEAD,
+    PREPROCESSORS
 )
 
 
@@ -31,6 +32,8 @@ def build_roi_head(cfg):
 def build_reader(cfg):
     return build(cfg, READERS)
 
+def build_preprocessor(cfg):
+    return build(cfg, PREPROCESSORS)
 
 def build_backbone(cfg):
     return build(cfg, BACKBONES)

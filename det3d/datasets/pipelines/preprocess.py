@@ -181,6 +181,7 @@ class Voxelization(object):
         self.max_voxel_num = [cfg.max_voxel_num, cfg.max_voxel_num] if isinstance(cfg.max_voxel_num, int) else cfg.max_voxel_num
 
         self.double_flip = cfg.get('double_flip', False)
+        self.rotate_and_duplicate = cfg.get('rotate_and_duplicate', False)
 
         self.voxel_generator = VoxelGenerator(
             voxel_size=self.voxel_size,
@@ -219,6 +220,33 @@ class Voxelization(object):
             range=pc_range,
             size=voxel_size
         )
+
+        rotate_and_duplicate = self.rotate_and_duplicate and (res["mode"] == 'train')
+        if rotate_and_duplicate:
+            points = res['lidar']['points']
+            gt_dict = res['lidar']['annotations']
+            theta = np.random.uniform(-0.78539816, 0.78539816)
+            gt_dict["gt_boxes"], points = prep.global_rotation(
+                gt_dict["gt_boxes"], points, rotation=[theta, theta],
+            )
+            #R = np.array([[np.cos(theta), -np.sin(theta)],
+            #              [np.sin(theta), np.cos(theta)]], dtype=np.float32)
+            voxels2, coordinates2, num_points2 = self.voxel_generator.generate(
+                points, max_voxels=max_voxels
+            )
+            #voxels2[:, 0, :2] @ R.T
+
+            num_voxels2 = np.array([voxels2.shape[0]], dtype=np.int64)
+            res["lidar"]["voxels2"] = dict(
+                voxels=voxels2,
+                coordinates=coordinates2,
+                num_points=num_points2,
+                num_voxels=num_voxels2,
+                shape=grid_size,
+                range=pc_range,
+                size=voxel_size,
+                theta=theta
+            )
 
         double_flip = self.double_flip and (res["mode"] != 'train')
 

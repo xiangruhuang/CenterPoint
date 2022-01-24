@@ -1,5 +1,6 @@
 from .compose import Compose
 from .formating import Reformat, ReformatTrace
+from .rotate_and_duplicate import RotateAndDuplicate
 
 from .loading import *
 from .test_aug import DoubleFlip
@@ -52,4 +53,5 @@ __all__ = [
     "MotionClustering",
     "TemporalClustering",
     "ComputeStats",
+    "RotateAndDuplicate",
 ]
